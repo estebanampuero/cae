@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Reservas</title>
+    
+    <!-- TailwindCSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- SheetJS (xlsx) CDN para leer archivos Excel -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* gray-50 */
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .day-selected {
+            background-color: #4f46e5 !important; /* indigo-600 */
+            color: white !important;
+            font-weight: bold;
+        }
+        .slot-selected {
+            background-color: #818cf8; /* indigo-400 */
+            color: white;
+            transform: scale(1.05);
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .slot-occupied {
+            background-color: #e2e8f0; /* slate-200 */
+            color: #94a3b8; /* slate-400 */
+            cursor: not-allowed;
+            text-decoration: line-through;
+        }
+        #time-slots-wrapper {
+            display: flex;
+            gap: 1rem;
+            overflow-x: auto;
+            padding-bottom: 1rem;
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e1 #f1f5f9;
+        }
+        @media (min-width: 640px) {
+            #time-slots-wrapper {
+                gap: 1.5rem;
+            }
+        }
+        .box-column {
+            flex: 0 0 130px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .box-title {
+            font-weight: 600;
+            color: #334155;
+            text-align: center;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #e2e8f0;
+            margin-bottom: 0.5rem;
+        }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="antialiased text-slate-700">
+
+    <!-- ===== LOGO DE LOCKEDINWORK (se mantiene visible) ===== -->
+    <a href="https://lockedinwork.com" target="_blank" rel="noopener noreferrer" class="fixed top-4 right-4 z-[60] text-lg font-bold text-slate-800 opacity-40 hover:opacity-100 transition-opacity duration-300">
+        LockedIn<span class="text-indigo-600">Work</span>
+    </a>
+
+    <!-- ===== PANTALLA DE INICIO DE SESIÓN ===== -->
+    <div id="login-overlay" class="fixed inset-0 bg-slate-100 z-50 flex items-center justify-center p-4">
+        <div class="w-full max-w-sm bg-white p-8 rounded-xl shadow-2xl fade-in">
+            <h2 class="text-2xl font-bold text-slate-800 text-center mb-2">Acceso Restringido</h2>
+            <p class="text-center text-slate-500 mb-6">Ingresa tus credenciales para continuar.</p>
+            <form id="login-form">
+                <div class="mb-4">
+                    <label for="username" class="block text-sm font-medium text-slate-600 mb-1">Usuario</label>
+                    <input type="text" id="username" name="username" required class="w-full p-2 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition">
+                </div>
+                <div class="mb-6">
+                    <label for="password" class="block text-sm font-medium text-slate-600 mb-1">Contraseña</label>
+                    <input type="password" id="password" name="password" required class="w-full p-2 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition">
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:bg-indigo-700 transition-all transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-indigo-300">
+                    Ingresar
+                </button>
+                <p id="login-error" class="text-red-500 text-sm text-center mt-4 hidden">Usuario o contraseña incorrectos.</p>
+            </form>
+        </div>
+    </div>
+
+    <!-- ===== CONTENIDO PRINCIPAL (Oculto por defecto) ===== -->
+    <div id="main-content" style="display: none;" class="container mx-auto p-4 md:p-6 lg:p-8 max-w-7xl pb-24 sm:pb-8">
+        
+        <header class="mb-8">
+            <h1 class="text-2xl sm:text-3xl font-bold text-slate-800">Agendar Horas</h1>
+            <p class="text-slate-500 mt-1">Selecciona la ubicación, el médico y elige los bloques horarios disponibles.</p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 p-4 sm:p-6 bg-white rounded-lg shadow-md">
+            <div>
+                <label for="cae-select" class="block text-sm font-medium text-slate-600 mb-1">CAE</label>
+                <select id="cae-select" class="w-full p-2 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition">
+                    <option value="">Cargando...</option>
+                </select>
+            </div>
+            <div>
+                <label for="box-select" class="block text-sm font-medium text-slate-600 mb-1">BOX (Filtro)</label>
+                <select id="box-select" class="w-full p-2 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition" disabled>
+                    <option value="">Selecciona un CAE</option>
+                </select>
+            </div>
+            <div>
+                <label for="medico-select" class="block text-sm font-medium text-slate-600 mb-1">MÉDICO</label>
+                <select id="medico-select" class="w-full p-2 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition" disabled>
+                    <option value="">Cargando...</option>
+                </select>
+                <input type="text" id="otro-medico-input" placeholder="Nombre del nuevo médico" class="w-full p-2 border border-slate-300 rounded-lg mt-2 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition hidden">
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-5 gap-8">
+            <div class="xl:col-span-2 bg-white p-4 sm:p-6 rounded-lg shadow-md">
+                <div id="calendar-header" class="flex items-center justify-between mb-4">
+                    <button id="prev-month" class="p-2 rounded-full hover:bg-slate-100 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg></button>
+                    <h2 id="month-year" class="text-lg sm:text-xl font-semibold text-slate-800"></h2>
+                    <button id="next-month" class="p-2 rounded-full hover:bg-slate-100 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg></button>
+                </div>
+                <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center"></div>
+            </div>
+            <div class="xl:col-span-3 bg-white p-4 sm:p-6 rounded-lg shadow-md fade-in" id="time-slots-container-wrapper">
+                <h3 class="text-lg sm:text-xl font-semibold text-slate-800 mb-1">Horarios Disponibles</h3>
+                <p id="selected-day-text" class="text-slate-500 mb-4 text-sm sm:text-base">Selecciona un CAE y un día en el calendario</p>
+                <div id="time-slots-wrapper" class="max-h-96 pr-2"></div>
+            </div>
+        </div>
+
+        <button id="reservar-btn" class="fixed bottom-4 left-4 right-4 sm:left-auto sm:bottom-8 sm:right-8 sm:w-auto z-40 bg-indigo-600 text-white font-bold py-3 px-6 rounded-full shadow-lg hover:bg-indigo-700 transition-all transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-indigo-300 text-center">Reservar</button>
+        
+        <div id="toast" class="fixed top-4 right-4 left-4 sm:left-auto sm:w-auto z-50 p-4 rounded-lg shadow-xl text-white transition-transform transform translate-x-full sm:translate-x-[120%]" role="alert">
+            <span id="toast-message"></span>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+
+        // --- SECCIÓN DE AUTENTICACIÓN ---
+        const USERS = {
+            "admin": "clave123",
+            "usuario1": "pass456"
+            // Agrega más usuarios y contraseñas aquí en formato "usuario": "contraseña"
+        };
+
+        const loginOverlay = document.getElementById('login-overlay');
+        const mainContent = document.getElementById('main-content');
+        const loginForm = document.getElementById('login-form');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const loginError = document.getElementById('login-error');
+
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const username = usernameInput.value;
+            const password = passwordInput.value;
+
+            if (USERS[username] && USERS[username] === password) {
+                // Credenciales correctas: Oculta el login, muestra el dashboard e inicia la app
+                loginOverlay.style.display = 'none';
+                mainContent.style.display = 'block';
+                init(); // Inicia la lógica del dashboard
+            } else {
+                // Credenciales incorrectas: Muestra error
+                loginError.classList.remove('hidden');
+                passwordInput.value = '';
+                usernameInput.focus();
+            }
+        });
+        // --- FIN DE LA SECCIÓN DE AUTENTICACIÓN ---
+
+        // --- CONFIGURACIÓN ---
+        const SHEET_ID = '1f3BMghdIXySvO7IVb0V2xXnYb1mXta4feq-MZQ-iNF0';
+        const GID_CONFIG = '0';
+        const GID_MEDICOS = '1913556286';
+
+        const URL_CONFIG = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx&gid=${GID_CONFIG}`;
+        const URL_MEDICOS = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx&gid=${GID_MEDICOS}`;
+        const API_RESERVAS_URL = 'https://agentes-liw-n8n-test.6tpykr.easypanel.host/webhook/a3398cd3-14aa-4a54-9c64-abecb95d88e8';
+        const API_CHECK_URL = 'https://agentes-liw-n8n-test.6tpykr.easypanel.host/webhook/2ef1ad96-a7b2-4669-8a8f-d1874781f147';
+        
+        // --- REFERENCIAS AL DOM ---
+        const caeSelect = document.getElementById('cae-select');
+        const boxSelect = document.getElementById('box-select');
+        const medicoSelect = document.getElementById('medico-select');
+        const otroMedicoInput = document.getElementById('otro-medico-input');
+        const calendarGrid = document.getElementById('calendar-grid');
+        const monthYearEl = document.getElementById('month-year');
+        const prevMonthBtn = document.getElementById('prev-month');
+        const nextMonthBtn = document.getElementById('next-month');
+        const timeSlotsWrapper = document.getElementById('time-slots-wrapper');
+        const selectedDayText = document.getElementById('selected-day-text');
+        const timeSlotsContainer = document.getElementById('time-slots-container-wrapper');
+        const reservarBtn = document.getElementById('reservar-btn');
+        const toastEl = document.getElementById('toast');
+        const toastMessageEl = document.getElementById('toast-message');
+
+        // --- ESTADO DE LA APLICACIÓN ---
+        let configData = [];
+        let medicosList = [];
+        let currentDate = new Date();
+        let selectedDate = null;
+        let selectedTimeSlots = new Set();
+        let selectedBoxForReservation = null;
+        let allOccupiedSlots = new Map();
+
+        // --- INICIALIZACIÓN (Llamada después del login exitoso) ---
+        const init = async () => {
+            timeSlotsContainer.style.display = 'none';
+            await loadAndPopulateFilters();
+            renderCalendar();
+            setupEventListeners();
+        };
+
+        // --- CARGA DE DATOS ---
+        const fetchSheetData = async (url, requiredColumns) => {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`Error al descargar datos. Revisa la URL y los permisos.`);
+                const arrayBuffer = await response.arrayBuffer();
+                const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet);
+                if (jsonData.length > 0) {
+                    for (const col of requiredColumns) {
+                        if (!(col in jsonData[0])) throw new Error(`La columna "${col}" no se encontró en la hoja correspondiente.`);
+                    }
+                }
+                return jsonData;
+            } catch (error) {
+                console.error(`Error en fetchSheetData para ${url}:`, error);
+                throw error;
+            }
+        };
+
+        const loadAndPopulateFilters = async () => {
+            try {
+                [configData, medicosList] = await Promise.all([
+                    fetchSheetData(URL_CONFIG, ['cae', 'box', 'calendar_id']),
+                    fetchSheetData(URL_MEDICOS, ['medico'])
+                ]);
+                populateCaeSelect();
+                populateMedicoSelect();
+                showToast('Datos cargados correctamente.', 'success');
+            } catch (error) {
+                console.error('Error al cargar datos:', error);
+                showToast(error.message, 'error');
+                caeSelect.innerHTML = `<option value="">Error al cargar</option>`;
+                medicoSelect.innerHTML = `<option value="">Error al cargar</option>`;
+            }
+        };
+        
+        // --- POBLACIÓN DE DESPLEGABLES ---
+        const populateCaeSelect = () => {
+            const caes = [...new Set(configData.map(item => item.cae))];
+            caeSelect.innerHTML = '<option value="">Selecciona un CAE</option>';
+            caes.sort().forEach(cae => {
+                const option = document.createElement('option');
+                option.value = cae;
+                option.textContent = cae;
+                caeSelect.appendChild(option);
+            });
+        };
+
+        const updateBoxSelect = () => {
+            const selectedCae = caeSelect.value;
+            boxSelect.innerHTML = '<option value="">Selecciona un CAE</option>';
+            boxSelect.disabled = true;
+            if (selectedCae) {
+                const boxes = configData
+                    .filter(item => String(item.cae).trim() === selectedCae.trim())
+                    .map(item => item.box)
+                    .sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true}));
+                const uniqueBoxes = [...new Set(boxes)];
+                
+                boxSelect.innerHTML = '<option value="all">-- Todos los BOX --</option>';
+
+                uniqueBoxes.forEach(box => {
+                    const option = document.createElement('option');
+                    option.value = box;
+                    option.textContent = box;
+                    boxSelect.appendChild(option);
+                });
+                boxSelect.disabled = false;
+            }
+        };
+
+        // --- LÓGICA DE DISPONIBILIDAD ---
+        const fetchAllBoxAvailabilities = async () => {
+            const cae = caeSelect.value;
+            allOccupiedSlots.clear();
+
+            if (!cae || !selectedDate) {
+                renderAllTimeSlots();
+                return;
+            }
+
+            const boxesForCae = configData.filter(item => String(item.cae).trim() === cae.trim() && item.calendar_id);
+            if (boxesForCae.length === 0) {
+                renderAllTimeSlots();
+                return;
+            }
+
+            timeSlotsWrapper.innerHTML = '<p class="w-full text-center text-slate-500 animate-pulse">Consultando disponibilidad para todos los boxes...</p>';
+
+            const timeMin = new Date(selectedDate);
+            timeMin.setHours(0, 0, 0, 0);
+            const timeMax = new Date(selectedDate);
+            timeMax.setHours(23, 59, 59, 999);
+
+            const availabilityPromises = boxesForCae.map(async (mapping) => {
+                try {
+                    const response = await fetch(API_CHECK_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            calendar_id: mapping.calendar_id,
+                            timeMin: timeMin.toISOString(),
+                            timeMax: timeMax.toISOString()
+                        })
+                    });
+                    if (!response.ok) return { box: mapping.box, occupied: [] };
+                    const data = await response.json();
+                    return { box: mapping.box, occupied: data.occupied || [] };
+                } catch (error) {
+                    console.error(`Error consultando box ${mapping.box}:`, error);
+                    return { box: mapping.box, occupied: [] };
+                }
+            });
+
+            try {
+                const results = await Promise.all(availabilityPromises);
+                results.forEach(result => {
+                    allOccupiedSlots.set(result.box, new Set(result.occupied));
+                });
+            } catch (error) {
+                console.error('Error en Promise.all para disponibilidades:', error);
+                showToast('Error al consultar la disponibilidad de algunos boxes.', 'error');
+            } finally {
+                renderAllTimeSlots();
+            }
+        };
+
+        // --- LÓGICA DEL CALENDARIO ---
+        const handleDayClick = async (e) => {
+            const target = e.target.closest('button');
+            if (!target || !target.dataset.date) return;
+            
+            if (!caeSelect.value) {
+                showToast('Primero debes seleccionar un CAE.', 'info');
+                return;
+            }
+            
+            document.querySelectorAll('#calendar-grid button.day-selected').forEach(btn => btn.classList.remove('day-selected'));
+            target.classList.add('day-selected');
+            selectedDate = new Date(target.dataset.date);
+            
+            await fetchAllBoxAvailabilities(); 
+        };
+
+        // --- LÓGICA DE BLOQUES HORARIOS ---
+        const renderAllTimeSlots = () => {
+            timeSlotsContainer.style.display = 'block';
+            timeSlotsWrapper.innerHTML = '';
+
+            if (!selectedDate) {
+                 selectedDayText.textContent = 'Selecciona un CAE y un día en el calendario';
+                 return;
+            }
+
+            selectedDayText.textContent = `Día: ${selectedDate.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}`;
+
+            const cae = caeSelect.value;
+            const boxesForCae = [...new Set(configData
+                .filter(item => String(item.cae).trim() === cae.trim())
+                .map(item => item.box))]
+                .sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true}));
+
+            if (boxesForCae.length === 0) {
+                timeSlotsWrapper.innerHTML = '<p class="w-full text-center text-slate-500">No hay boxes configurados para este CAE.</p>';
+                return;
+            }
+            
+            boxesForCae.forEach(boxName => {
+                const columnDiv = document.createElement('div');
+                columnDiv.classList.add('box-column');
+                columnDiv.dataset.boxColumn = boxName;
+
+                const title = document.createElement('h4');
+                title.classList.add('box-title');
+                title.textContent = boxName;
+                columnDiv.appendChild(title);
+
+                const occupiedForThisBox = allOccupiedSlots.get(boxName) || new Set();
+
+                for (let hour = 8; hour < 20; hour++) {
+                    for (let minute = 0; minute < 60; minute += 30) {
+                        const time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+                        const slotEl = document.createElement('button');
+                        slotEl.textContent = time;
+                        slotEl.dataset.time = time;
+                        slotEl.dataset.box = boxName;
+                        slotEl.classList.add('p-2', 'rounded-lg', 'transition-all', 'duration-200', 'ease-in-out', 'shadow-sm', 'font-medium', 'text-sm');
+                        
+                        if (occupiedForThisBox.has(time)) {
+                            slotEl.disabled = true;
+                            slotEl.classList.add('slot-occupied');
+                        } else {
+                            slotEl.classList.add('bg-slate-100', 'hover:bg-indigo-200');
+                        }
+                        
+                        if (selectedBoxForReservation === boxName && selectedTimeSlots.has(time)) {
+                             slotEl.classList.add('slot-selected');
+                        }
+
+                        columnDiv.appendChild(slotEl);
+                    }
+                }
+                timeSlotsWrapper.appendChild(columnDiv);
+            });
+            filterBoxView();
+        };
+
+        const handleTimeSlotClick = (e) => {
+            const target = e.target.closest('button');
+            if (!target || !target.dataset.time || target.disabled) return;
+
+            const time = target.dataset.time;
+            const box = target.dataset.box;
+
+            if (selectedBoxForReservation && selectedBoxForReservation !== box) {
+                selectedTimeSlots.clear();
+                document.querySelectorAll('.slot-selected').forEach(el => el.classList.remove('slot-selected'));
+            }
+
+            selectedBoxForReservation = box;
+
+            if (selectedTimeSlots.has(time)) {
+                selectedTimeSlots.delete(time);
+                target.classList.remove('slot-selected');
+            } else {
+                selectedTimeSlots.add(time);
+                target.classList.add('slot-selected');
+            }
+            
+            if (selectedTimeSlots.size === 0) {
+                selectedBoxForReservation = null;
+            }
+        };
+        
+        const filterBoxView = () => {
+            const selectedBox = boxSelect.value;
+            const allColumns = document.querySelectorAll('.box-column');
+            
+            allColumns.forEach(column => {
+                if (selectedBox === 'all' || selectedBox === '') {
+                    column.style.display = 'flex';
+                } else {
+                    column.style.display = column.dataset.boxColumn === selectedBox ? 'flex' : 'none';
+                }
+            });
+        };
+        
+        // --- LÓGICA DE EVENTOS ---
+        const setupEventListeners = () => {
+            caeSelect.addEventListener('change', () => {
+                updateBoxSelect();
+                if (selectedDate) {
+                    fetchAllBoxAvailabilities();
+                } else {
+                    timeSlotsContainer.style.display = 'none';
+                    selectedTimeSlots.clear();
+                    selectedBoxForReservation = null;
+                }
+            });
+            
+            boxSelect.addEventListener('change', filterBoxView);
+
+            medicoSelect.addEventListener('change', () => {
+                otroMedicoInput.classList.toggle('hidden', medicoSelect.value !== 'otro');
+            });
+            
+            prevMonthBtn.addEventListener('click', () => {
+                currentDate.setMonth(currentDate.getMonth() - 1);
+                renderCalendar();
+                timeSlotsContainer.style.display = 'none';
+                selectedDate = null;
+            });
+            
+            nextMonthBtn.addEventListener('click', () => {
+                currentDate.setMonth(currentDate.getMonth() + 1);
+                renderCalendar();
+                timeSlotsContainer.style.display = 'none';
+                selectedDate = null;
+            });
+            
+            calendarGrid.addEventListener('click', handleDayClick);
+            timeSlotsWrapper.addEventListener('click', handleTimeSlotClick);
+            reservarBtn.addEventListener('click', handleReserveClick);
+        };
+        
+        // --- MANEJO DE FECHAS Y RESERVA ---
+        const isDstInSantiago = (date) => {
+            const year = date.getFullYear();
+            const firstOfSep = new Date(year, 8, 1);
+            const firstSaturdaySep = new Date(firstOfSep);
+            firstSaturdaySep.setDate(1 + (6 - firstOfSep.getDay() + 7) % 7);
+            firstSaturdaySep.setHours(23, 59, 59);
+            const firstOfApr = new Date(year, 3, 1);
+            const firstSaturdayApr = new Date(firstOfApr);
+            firstSaturdayApr.setDate(1 + (6 - firstOfApr.getDay() + 7) % 7);
+            firstSaturdayApr.setHours(23, 59, 59);
+            return date >= firstSaturdaySep || date < firstSaturdayApr;
+        };
+        const getSantiagoOffset = (date) => isDstInSantiago(date) ? '-03:00' : '-04:00';
+        const formatToISOWithOffset = (date, time) => {
+            const [hours, minutes] = time.split(':');
+            const dateWithTime = new Date(date);
+            dateWithTime.setHours(hours, minutes, 0, 0);
+            const year = dateWithTime.getFullYear();
+            const month = String(dateWithTime.getMonth() + 1).padStart(2, '0');
+            const day = String(dateWithTime.getDate()).padStart(2, '0');
+            const offset = getSantiagoOffset(dateWithTime);
+            return `${year}-${month}-${day}T${time}:00${offset}`;
+        };
+
+        async function handleReserveClick() {
+            const cae = caeSelect.value;
+            const box = selectedBoxForReservation;
+            let medico = medicoSelect.value;
+            const otroMedico = otroMedicoInput.value.trim();
+            let esNuevoMedico = false;
+
+            if (medico === 'otro') {
+                if (!otroMedico) {
+                    return showToast('Por favor, ingresa el nombre del nuevo médico.', 'error');
+                }
+                medico = otroMedico;
+                esNuevoMedico = true;
+            }
+
+            if (!cae || !box || !medico) {
+                return showToast('Completa todos los filtros (CAE, Médico) y selecciona un horario en un BOX.', 'error');
+            }
+            if (!selectedDate) {
+                return showToast('Por favor, selecciona un día en el calendario.', 'error');
+            }
+            if (selectedTimeSlots.size === 0) {
+                return showToast('Por favor, selecciona al menos un bloque horario.', 'error');
+            }
+
+            const calendarMapping = configData.find(item => 
+                String(item.cae).trim() === cae.trim() && 
+                String(item.box).trim() === box.trim()
+            );
+
+            if (!calendarMapping) {
+                return showToast('Error: No se encontró calendario para esa combinación de CAE y BOX.', 'error');
+            }
+
+            await fetchAllBoxAvailabilities();
+            const slotsArray = Array.from(selectedTimeSlots);
+            const occupiedSlotsForThisBox = allOccupiedSlots.get(box) || new Set();
+            const alreadyReserved = slotsArray.some(slot => occupiedSlotsForThisBox.has(slot));
+            
+            if (alreadyReserved) {
+                showToast('¡Conflicto! Uno de los horarios fue ocupado mientras elegías. Por favor, selecciona otros.', 'error');
+                selectedTimeSlots.clear();
+                selectedBoxForReservation = null;
+                return;
+            }
+
+            const calendarId = calendarMapping.calendar_id;
+            const reservas = slotsArray.sort().map(time => {
+                const [hours, minutes] = time.split(':').map(Number);
+                const fechaInicio = new Date(selectedDate);
+                fechaInicio.setHours(hours, minutes, 0, 0);
+                const fechaFin = new Date(fechaInicio);
+                fechaFin.setMinutes(fechaInicio.getMinutes() + 30);
+                return {
+                    fecha_inicio: formatToISOWithOffset(selectedDate, time),
+                    fecha_fin: formatToISOWithOffset(selectedDate, `${String(fechaFin.getHours()).padStart(2, '0')}:${String(fechaFin.getMinutes()).padStart(2, '0')}`)
+                };
+            });
+
+            const payload = { cae, box, medico, nuevo_medico: esNuevoMedico, calendar_id: calendarId, reservas };
+            
+            reservarBtn.disabled = true;
+            reservarBtn.textContent = 'Reservando...';
+            showToast('Enviando reserva...', 'info');
+
+            try {
+                const response = await fetch(API_RESERVAS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) throw new Error(`El servidor respondió con ${response.status}`);
+                showToast('¡Reserva realizada con éxito!', 'success');
+                resetForm();
+            } catch (error) {
+                console.error('Error al enviar la reserva:', error);
+                showToast('Error al enviar la reserva. Intenta de nuevo.', 'error');
+            } finally {
+                reservarBtn.disabled = false;
+                reservarBtn.textContent = 'Reservar';
+            }
+        };
+
+        // --- OTRAS FUNCIONES AUXILIARES ---
+        const showToast = (message, type = 'info') => {
+            toastMessageEl.textContent = message;
+            const isMobile = window.innerWidth < 640;
+            const initialTransform = isMobile ? 'translateX(100%)' : 'translateX(120%)';
+            toastEl.classList.remove('bg-green-500', 'bg-red-500', 'bg-blue-500');
+            if (isMobile) {
+                toastEl.classList.remove('translate-x-[120%]');
+                toastEl.classList.add('translate-x-full');
+            } else {
+                 toastEl.classList.remove('translate-x-full');
+                 toastEl.classList.add('translate-x-[120%]');
+            }
+            
+            const typeClasses = { success: 'bg-green-500', error: 'bg-red-500', info: 'bg-blue-500' };
+            toastEl.classList.add(typeClasses[type]);
+            toastEl.style.transform = 'translateX(0)';
+            setTimeout(() => { toastEl.style.transform = initialTransform; }, 4000);
+        };
+
+        const resetForm = () => {
+            caeSelect.value = '';
+            updateBoxSelect();
+            medicoSelect.value = '';
+            otroMedicoInput.value = '';
+            otroMedicoInput.classList.add('hidden');
+            selectedDate = null;
+            selectedTimeSlots.clear();
+            selectedBoxForReservation = null;
+            allOccupiedSlots.clear();
+            timeSlotsContainer.style.display = 'none';
+            document.querySelectorAll('#calendar-grid button.day-selected').forEach(btn => btn.classList.remove('day-selected'));
+        };
+
+        function populateMedicoSelect() {
+            medicoSelect.innerHTML = '<option value="">Selecciona un Médico</option>';
+            medicosList.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.medico;
+                option.textContent = item.medico;
+                medicoSelect.appendChild(option);
+            });
+            const otroOption = document.createElement('option');
+            otroOption.value = 'otro';
+            otroOption.textContent = 'Otro / Agregar médico...';
+            medicoSelect.appendChild(otroOption);
+            medicoSelect.disabled = false;
+        };
+        
+        function renderCalendar() {
+            calendarGrid.innerHTML = `<div class="font-medium text-xs text-slate-500">LU</div><div class="font-medium text-xs text-slate-500">MA</div><div class="font-medium text-xs text-slate-500">MI</div><div class="font-medium text-xs text-slate-500">JU</div><div class="font-medium text-xs text-slate-500">VI</div><div class="font-medium text-xs text-slate-500">SA</div><div class="font-medium text-xs text-slate-500">DO</div>`;
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            monthYearEl.textContent = currentDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).replace(/^\w/, c => c.toUpperCase());
+            const firstDayOfMonth = new Date(year, month, 1);
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const startDayIndex = (firstDayOfMonth.getDay() + 6) % 7;
+            for (let i = 0; i < startDayIndex; i++) {
+                calendarGrid.appendChild(document.createElement('div'));
+            }
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dayEl = document.createElement('button');
+                dayEl.textContent = day;
+                dayEl.classList.add('p-1', 'sm:p-2', 'rounded-full', 'hover:bg-slate-100', 'transition', 'cursor-pointer', 'w-full', 'aspect-square', 'flex', 'items-center', 'justify-center', 'mx-auto', 'text-sm');
+                const today = new Date();
+                if (year === today.getFullYear() && month === today.getMonth() && day === today.getDate()) {
+                    dayEl.classList.add('bg-slate-200', 'font-bold');
+                }
+                dayEl.dataset.date = new Date(year, month, day).toISOString();
+                calendarGrid.appendChild(dayEl);
+            }
+        };
+
+        // La función init() ya no se llama aquí.
+        // Se llamará automáticamente después de un inicio de sesión exitoso.
+    });
+    </script>
+</body>
+</html>

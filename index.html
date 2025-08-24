@@ -18,7 +18,6 @@
         .slot-occupied-wrapper { background-color: #e2e8f0; color: #475569; padding: 0.5rem; border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.875rem; line-height: 1.25rem; min-height: 40px; }
         .delete-btn { background: #fecaca; color: #b91c1c; border-radius: 9999px; width: 1.75rem; height: 1.75rem; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; border: none; cursor: pointer; transition: all 0.2s; flex-shrink: 0; margin-left: 0.5rem; }
         .delete-btn:hover { background: #ef4444; color: white; transform: scale(1.1); }
-        .slot-occupied { background-color: #e2e8f0; color: #94a3b8; cursor: not-allowed; text-decoration: line-through; }
         #time-slots-wrapper { display: flex; gap: 1rem; overflow-x: auto; padding-bottom: 1rem; scrollbar-width: thin; scrollbar-color: #cbd5e1 #f1f5f9; }
         @media (min-width: 640px) { #time-slots-wrapper { gap: 1.5rem; } }
         .box-column { flex: 0 0 160px; display: flex; flex-direction: column; gap: 0.5rem; }
@@ -211,7 +210,6 @@
             try {
                 const results = await Promise.all(availabilityPromises);
                 results.forEach(result => {
-                    // AQUÍ ESTÁ EL CAMBIO: Se procesa el array de objetos en un mapa.
                     const occupiedMap = result.occupied.reduce((acc, curr) => { 
                         acc[curr.time] = { eventId: curr.eventId, summary: curr.summary }; 
                         return acc;
@@ -237,22 +235,19 @@
                 columnDiv.className = "box-column";
                 columnDiv.dataset.boxColumn = boxName;
                 columnDiv.innerHTML = `<h4 class="box-title">${boxName}</h4>`;
-                const occupiedForThisBox = allOccupiedSlots.get(boxName) || {}; // Ahora es un objeto
+                const occupiedForThisBox = allOccupiedSlots.get(boxName) || {};
                 const calendarId = configData.find(item => String(item.box).trim() === boxName.trim() && String(item.cae).trim() === cae.trim())?.calendar_id;
                 
                 for (let hour = 8; hour < 20; hour++) {
                     for (let minute = 0; minute < 60; minute += 30) {
                         const time = `${String(hour).padStart(2,"0")}:${String(minute).padStart(2,"0")}`;
-                        const occupiedInfo = occupiedForThisBox[time]; // Buscamos la info del horario
-
+                        const occupiedInfo = occupiedForThisBox[time];
                         if (occupiedInfo && occupiedInfo.eventId) {
-                            // Si hay información de reserva, se crea el botón "X"
                             const wrapper = document.createElement("div");
                             wrapper.className = "slot-occupied-wrapper";
                             wrapper.innerHTML = `<span class="truncate" title="${occupiedInfo.summary||"Ocupado"}">${occupiedInfo.summary||"Ocupado"}</span><button class="delete-btn" title="Eliminar reserva" data-event-id="${occupiedInfo.eventId}" data-calendar-id="${calendarId}">&times;</button>`;
                             columnDiv.appendChild(wrapper);
                         } else {
-                            // Si no, se crea un botón normal para reservar
                             const slotEl = document.createElement("button");
                             slotEl.textContent = time;
                             slotEl.dataset.time = time;
@@ -298,10 +293,8 @@
             prevMonthBtn.addEventListener('click', () => changeMonth(-1));
             nextMonthBtn.addEventListener('click', () => changeMonth(1));
             
-            // Se usa handleDayClick para mantener el código limpio
-            calendarGrid.addEventListener('click', handleDayClick); 
+            calendarGrid.addEventListener('click', handleDayClick);
             
-            // Listener unificado que maneja tanto clics para seleccionar como para eliminar
             timeSlotsWrapper.addEventListener('click', (e) => { 
                 if (e.target.closest('.delete-btn')) {
                     handleDeleteClick(e);
@@ -351,15 +344,7 @@
             document.querySelectorAll(".box-column").forEach(column => { "all" === selectedBox || "" === selectedBox ? column.style.display = "flex" : column.style.display = column.dataset.boxColumn === selectedBox ? "flex" : "none" });
         };
         
-        const formatToISOWithOffset = (date, time) => {
-            const [hours, minutes] = time.split(':');
-            const dateWithTime = new Date(date);
-            dateWithTime.setHours(hours, minutes, 0, 0);
-            const year = dateWithTime.getFullYear(), month = String(dateWithTime.getMonth() + 1).padStart(2, '0'), day = String(dateWithTime.getDate()).padStart(2, '0');
-            const isDst = (d) => { const y=d.getFullYear(),s=new Date(y,8,1),f=new Date(s);f.setDate(1+(6-s.getDay()+7)%7),f.setHours(23,59,59);const a=new Date(y,3,1),p=new Date(a);return p.setDate(1+(6-a.getDay()+7)%7),p.setHours(23,59,59),d>=f||d<p };
-            const offset = isDst(dateWithTime) ? '-03:00' : '-04:00';
-            return `${year}-${month}-${day}T${time}:00${offset}`;
-        };
+        const formatToISOWithOffset=(e,t)=>{const[o,n]=t.split(":"),s=new Date(e);s.setHours(o,n,0,0);const r=s.getFullYear(),a=String(s.getMonth()+1).padStart(2,"0"),c=String(s.getDate()).padStart(2,"0"),i=(e=>{const t=e.getFullYear(),o=new Date(t,8,1),n=new Date(o);n.setDate(1+(6-o.getDay()+7)%7),n.setHours(23,59,59);const s=new Date(t,3,1),r=new Date(s);return r.setDate(1+(6-s.getDay()+7)%7),r.setHours(23,59,59),e>=n||e<r?"-03:00":"-04:00"})(s);return`${r}-${a}-${c}T${t}:00${i}`};
         
         async function handleReserveClick() {
             const cae=caeSelect.value,box=selectedBoxForReservation;let medico=medicoSelect.value;const otroMedico=otroMedicoInput.value.trim();if("otro"===medico){if(!otroMedico)return showToast("Por favor, ingresa el nombre del nuevo médico.","error");medico=otroMedico}if(!cae||!box||!medico||!selectedDate||0===selectedTimeSlots.size)return showToast("Completa todos los filtros y selecciona un horario.","error");const calendarMapping=configData.find(item=>String(item.cae).trim()===cae.trim()&&String(item.box).trim()===box.trim());if(!calendarMapping)return showToast("Error: No se encontró calendario.","error");await fetchAllBoxAvailabilities();const slotsArray=Array.from(selectedTimeSlots),occupiedSlotsForThisBox=allOccupiedSlots.get(box)||{};if(slotsArray.some(slot=>occupiedSlotsForThisBox[slot]))return showToast("¡Conflicto! Uno de los horarios fue ocupado.","error"),selectedTimeSlots.clear(),selectedBoxForReservation=null,renderAllTimeSlots(),void 0;const calendarId=calendarMapping.calendar_id,reservas=slotsArray.sort().map(time=>{const[e,t]=time.split(":").map(Number),o=new Date(selectedDate);o.setHours(e,t,0,0);const n=new Date(o);n.setMinutes(o.getMinutes()+30);return{fecha_inicio:formatToISOWithOffset(selectedDate,time),fecha_fin:formatToISOWithOffset(selectedDate,`${String(n.getHours()).padStart(2,"0")}:${String(n.getMinutes()).padStart(2,"0")}`)}}),payload={cae,box,medico,nuevo_medico:"otro"===medicoSelect.value,calendar_id:calendarId,reservas};reservarBtn.disabled=!0,reservarBtn.textContent="Reservando...",showToast("Enviando reserva...","info");try{const response=await fetch(API_RESERVAS_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!response.ok)throw new Error(`El servidor respondió con ${response.status}`);showToast("¡Reserva realizada con éxito!","success"),resetForm()}catch(error){console.error("Error al enviar la reserva:",error),showToast("Error al enviar la reserva.","error")}finally{reservarBtn.disabled=!1,reservarBtn.textContent="Reservar"}

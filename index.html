@@ -5,106 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard de Reservas</title>
     
-    <!-- TailwindCSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- SheetJS (xlsx) CDN para leer archivos Excel -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-    
-    <!-- Google Fonts: Inter -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f8fafc; /* gray-50 */
-        }
-        .fade-in {
-            animation: fadeIn 0.5s ease-in-out;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .day-selected {
-            background-color: #4f46e5 !important; /* indigo-600 */
-            color: white !important;
-            font-weight: bold;
-        }
-        .slot-selected {
-            background-color: #818cf8; /* indigo-400 */
-            color: white;
-            transform: scale(1.05);
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-        }
-        /* ===== INICIO DE CAMBIOS DE ESTILO ===== */
-        .slot-occupied-wrapper {
-            background-color: #e2e8f0; /* slate-200 */
-            color: #475569; /* slate-600 */
-            padding: 0.5rem;
-            border-radius: 0.5rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 0.875rem;
-            line-height: 1.25rem;
-            min-height: 40px; /* Para alinear con los botones de horarios libres */
-        }
-        .delete-btn {
-            background: #fecaca; /* red-200 */
-            color: #b91c1c; /* red-700 */
-            border-radius: 9999px;
-            width: 1.75rem;
-            height: 1.75rem;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            border: none;
-            cursor: pointer;
-            transition: all 0.2s;
-            flex-shrink: 0; /* Evita que el botón se encoja */
-            margin-left: 0.5rem;
-        }
-        .delete-btn:hover {
-            background: #ef4444; /* red-500 */
-            color: white;
-            transform: scale(1.1);
-        }
-        #time-slots-wrapper {
-            display: flex;
-            gap: 1rem;
-            overflow-x: auto;
-            padding-bottom: 1rem;
-            scrollbar-width: thin;
-            scrollbar-color: #cbd5e1 #f1f5f9;
-        }
-        @media (min-width: 640px) {
-            #time-slots-wrapper {
-                gap: 1.5rem;
-            }
-        }
-        .box-column {
-            flex: 0 0 160px; /* Ancho aumentado para dar espacio al nuevo diseño */
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-        /* ===== FIN DE CAMBIOS DE ESTILO ===== */
-        .box-title {
-            font-weight: 600;
-            color: #334155;
-            text-align: center;
-            padding-bottom: 0.5rem;
-            border-bottom: 2px solid #e2e8f0;
-            margin-bottom: 0.5rem;
-        }
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f5f9; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .day-selected { background-color: #4f46e5 !important; color: white !important; font-weight: bold; }
+        .slot-selected { background-color: #818cf8; color: white; transform: scale(1.05); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); }
+        .slot-occupied-wrapper { background-color: #e2e8f0; color: #475569; padding: 0.5rem; border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.875rem; line-height: 1.25rem; min-height: 40px; }
+        .delete-btn { background: #fecaca; color: #b91c1c; border-radius: 9999px; width: 1.75rem; height: 1.75rem; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; border: none; cursor: pointer; transition: all 0.2s; flex-shrink: 0; margin-left: 0.5rem; }
+        .delete-btn:hover { background: #ef4444; color: white; transform: scale(1.1); }
+        #time-slots-wrapper { display: flex; gap: 1rem; overflow-x: auto; padding-bottom: 1rem; scrollbar-width: thin; scrollbar-color: #cbd5e1 #f1f5f9; }
+        @media (min-width: 640px) { #time-slots-wrapper { gap: 1.5rem; } }
+        .box-column { flex: 0 0 160px; display: flex; flex-direction: column; gap: 0.5rem; }
+        .box-title { font-weight: 600; color: #334155; text-align: center; padding-bottom: 0.5rem; border-bottom: 2px solid #e2e8f0; margin-bottom: 0.5rem; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-track { background: #f1f5f9; } ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; } ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
 <body class="antialiased text-slate-700">
@@ -127,15 +45,12 @@
     </div>
 
     <div id="main-content" style="display: none;" class="container mx-auto p-4 md:p-6 lg:p-8 max-w-7xl pb-24 sm:pb-8">
-        
         <header class="mb-8"><h1 class="text-2xl sm:text-3xl font-bold text-slate-800">Agendar y Gestionar Horas</h1><p class="text-slate-500 mt-1">Selecciona, reserva o elimina bloques horarios.</p></header>
-        
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 p-4 sm:p-6 bg-white rounded-lg shadow-md">
             <div><label for="cae-select" class="block text-sm font-medium text-slate-600 mb-1">CAE</label><select id="cae-select" class="w-full p-2 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"><option value="">Cargando...</option></select></div>
             <div><label for="box-select" class="block text-sm font-medium text-slate-600 mb-1">BOX (Filtro)</label><select id="box-select" class="w-full p-2 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition" disabled><option value="">Selecciona un CAE</option></select></div>
             <div><label for="medico-select" class="block text-sm font-medium text-slate-600 mb-1">MÉDICO</label><select id="medico-select" class="w-full p-2 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition" disabled><option value="">Cargando...</option></select><input type="text" id="otro-medico-input" placeholder="Nombre del nuevo médico" class="w-full p-2 border border-slate-300 rounded-lg mt-2 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition hidden"></div>
         </div>
-        
         <div class="grid grid-cols-1 xl:grid-cols-5 gap-8">
             <div class="xl:col-span-2 bg-white p-4 sm:p-6 rounded-lg shadow-md">
                 <div id="calendar-header" class="flex items-center justify-between mb-4"><button id="prev-month" class="p-2 rounded-full hover:bg-slate-100 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg></button><h2 id="month-year" class="text-lg sm:text-xl font-semibold text-slate-800"></h2><button id="next-month" class="p-2 rounded-full hover:bg-slate-100 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg></button></div>
@@ -143,14 +58,12 @@
             </div>
             <div class="xl:col-span-3 bg-white p-4 sm:p-6 rounded-lg shadow-md fade-in" id="time-slots-container-wrapper"><h3 class="text-lg sm:text-xl font-semibold text-slate-800 mb-1">Horarios Disponibles</h3><p id="selected-day-text" class="text-slate-500 mb-4 text-sm sm:text-base">Selecciona un CAE y un día en el calendario</p><div id="time-slots-wrapper" class="max-h-96 pr-2"></div></div>
         </div>
-        
         <button id="reservar-btn" class="fixed bottom-4 left-4 right-4 sm:left-auto sm:bottom-8 sm:right-8 sm:w-auto z-40 bg-indigo-600 text-white font-bold py-3 px-6 rounded-full shadow-lg hover:bg-indigo-700 transition-all transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-indigo-300 text-center">Reservar</button>
         <div id="toast" class="fixed top-4 right-4 left-4 sm:left-auto sm:w-auto z-50 p-4 rounded-lg shadow-xl text-white transition-transform transform translate-x-full sm:translate-x-[120%]" role="alert"><span id="toast-message"></span></div>
     </div>
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-
         const USERS = { "admin": "clave123", "usuario1": "pass456" };
         const loginOverlay = document.getElementById('login-overlay');
         const mainContent = document.getElementById('main-content');
@@ -226,7 +139,7 @@
                     for (let minute = 0; minute < 60; minute += 30) {
                         const time = `${String(hour).padStart(2,"0")}:${String(minute).padStart(2,"0")}`;
                         const occupiedInfo = occupiedForThisBox[time];
-                        if (occupiedInfo) {
+                        if (occupiedInfo && occupiedInfo.eventId) { // Verificación clave: solo dibuja si hay eventId
                             const wrapper = document.createElement("div");
                             wrapper.className = "slot-occupied-wrapper";
                             wrapper.innerHTML = `<span class="truncate" title="${occupiedInfo.summary||"Ocupado"}">${occupiedInfo.summary||"Ocupado"}</span><button class="delete-btn" title="Eliminar reserva" data-event-id="${occupiedInfo.eventId}" data-calendar-id="${calendarId}">&times;</button>`;
@@ -234,6 +147,10 @@
                         } else {
                             const slotEl = document.createElement("button");
                             slotEl.textContent = time, slotEl.dataset.time = time, slotEl.dataset.box = boxName, slotEl.className = "p-2 rounded-lg transition-all text-sm bg-slate-100 hover:bg-indigo-200";
+                            if(occupiedInfo){ // Si está ocupado pero no hay eventId, se deshabilita
+                                slotEl.disabled = true;
+                                slotEl.classList.add('slot-occupied'); // Estilo tachado original
+                            }
                             if (selectedBoxForReservation === boxName && selectedTimeSlots.has(time)) slotEl.classList.add("slot-selected");
                             columnDiv.appendChild(slotEl);
                         }

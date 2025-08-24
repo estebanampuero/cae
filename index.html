@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Reservas</title>
+    
+    <!-- TailwindCSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- SheetJS (xlsx) CDN para leer archivos Excel -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- MODIFICADO: Estilos para el nuevo botón de eliminar y el contenedor del horario ocupado -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* gray-50 */
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .day-selected {
+            background-color: #4f46e5 !important; /* indigo-600 */
+            color: white !important;
+            font-weight: bold;
+        }
+        .slot-selected {
+            background-color: #818cf8; /* indigo-400 */
+            color: white;
+            transform: scale(1.05);
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        /* NUEVO: Contenedor para el horario ocupado que incluye el botón de eliminar */
+        .slot-occupied-wrapper {
+            background-color: #e2e8f0; /* slate-200 */
+            color: #475569; /* slate-600 */
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.875rem;
+            line-height: 1.25rem;
+            min-height: 40px; /* Para alinear con los botones libres */
+        }
+        /* NUEVO: Estilo para el botón de eliminar (la "X") */
+        .delete-btn {
+            background: #fecaca; /* red-200 */
+            color: #b91c1c; /* red-700 */
+            border-radius: 9999px;
+            width: 1.75rem;
+            height: 1.75rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex-shrink: 0; /* Evita que el botón se encoja */
+            margin-left: 0.5rem;
+        }
+        .delete-btn:hover {
+            background: #ef4444; /* red-500 */
+            color: white;
+            transform: scale(1.1);
+        }
+        #time-slots-wrapper {
+            display: flex;
+            gap: 1rem;
+            overflow-x: auto;
+            padding-bottom: 1rem;
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e1 #f1f5f9;
+        }
+        @media (min-width: 640px) {
+            #time-slots-wrapper {
+                gap: 1.5rem;
+            }
+        }
+        /* MODIFICADO: Columna un poco más ancha para dar espacio al nuevo diseño */
+        .box-column {
+            flex: 0 0 160px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .box-title {
+            font-weight: 600;
+            color: #334155;
+            text-align: center;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #e2e8f0;
+            margin-bottom: 0.5rem;
+        }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="antialiased text-slate-700">
+
+    <!-- ===== LOGO DE LOCKEDINWORK (se mantiene visible) ===== -->
+    <a href="https://lockedinwork.com" target="_blank" rel="noopener noreferrer" class="fixed top-4 right-4 z-[60] text-lg font-bold text-slate-800 opacity-40 hover:opacity-100 transition-opacity duration-300">
+        LockedIn<span class="text-indigo-600">Work</span>
+    </a>
+
+    <!-- ===== PANTALLA DE INICIO DE SESIÓN ===== -->
+    <div id="login-overlay" class="fixed inset-0 bg-slate-100 z-50 flex items-center justify-center p-4">
+        <div class="w-full max-w-sm bg-white p-8 rounded-xl shadow-2xl fade-in">
+            <h2 class="text-2xl font-bold text-slate-800 text-center mb-2">Acceso Restringido</h2>
+            <p class="text-center text-slate-500 mb-6">Ingresa tus credenciales para continuar.</p>
+            <form id="login-form">
+                <div class="mb-4">
+                    <label for="username" class="block text-sm font-medium text-slate-600 mb-1">Usuario</label>
+                    <input type="text" id="username" name="username" required class="w-full p-2 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition">
+                </div>
+                <div class="mb-6">
+                    <label for="password" class="block text-sm font-medium text-slate-600 mb-1">Contraseña</label>
+                    <input type="password" id="password" name="password" required class="w-full p-2 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition">
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:bg-indigo-700 transition-all transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-indigo-300">
+                    Ingresar
+                </button>
+                <p id="login-error" class="text-red-500 text-sm text-center mt-4 hidden">Usuario o contraseña incorrectos.</p>
+            </form>
+        </div>
+    </div>
+
+    <!-- ===== CONTENIDO PRINCIPAL (Oculto por defecto) ===== -->
+    <div id="main-content" style="display: none;" class="container mx-auto p-4 md:p-6 lg:p-8 max-w-7xl pb-24 sm:pb-8">
+        
+        <header class="mb-8">
+            <h1 class="text-2xl sm:text-3xl font-bold text-slate-800">Agendar y Gestionar Horas</h1>
+            <p class="text-slate-500 mt-1">Selecciona, reserva o elimina bloques horarios.</p>
+        </header>
+
+        <!-- El resto del HTML no necesita cambios... -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 p-4 sm:p-6 bg-white rounded-lg shadow-md">
+            <div>
+                <label for="cae-select" class="block text-sm font-medium text-slate-600 mb-1">CAE</label>
+                <select id="cae-select" class="w-full p-2 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition">
+                    <option value="">Cargando...</option>
+                </select>
+            </div>
+            <div>
+                <label for="box-select" class="block text-sm font-medium text-slate-600 mb-1">BOX (Filtro)</label>
+                <select id="box-select" class="w-full p-2 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition" disabled>
+                    <option value="">Selecciona un CAE</option>
+                </select>
+            </div>
+            <div>
+                <label for="medico-select" class="block text-sm font-medium text-slate-600 mb-1">MÉDICO</label>
+                <select id="medico-select" class="w-full p-2 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition" disabled>
+                    <option value="">Cargando...</option>
+                </select>
+                <input type="text" id="otro-medico-input" placeholder="Nombre del nuevo médico" class="w-full p-2 border border-slate-300 rounded-lg mt-2 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition hidden">
+            </div>
+        </div>
+        <div class="grid grid-cols-1 xl:grid-cols-5 gap-8">
+            <div class="xl:col-span-2 bg-white p-4 sm:p-6 rounded-lg shadow-md">
+                <div id="calendar-header" class="flex items-center justify-between mb-4">
+                    <button id="prev-month" class="p-2 rounded-full hover:bg-slate-100 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg></button>
+                    <h2 id="month-year" class="text-lg sm:text-xl font-semibold text-slate-800"></h2>
+                    <button id="next-month" class="p-2 rounded-full hover:bg-slate-100 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg></button>
+                </div>
+                <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center"></div>
+            </div>
+            <div class="xl:col-span-3 bg-white p-4 sm:p-6 rounded-lg shadow-md fade-in" id="time-slots-container-wrapper">
+                <h3 class="text-lg sm:text-xl font-semibold text-slate-800 mb-1">Horarios Disponibles</h3>
+                <p id="selected-day-text" class="text-slate-500 mb-4 text-sm sm:text-base">Selecciona un CAE y un día en el calendario</p>
+                <div id="time-slots-wrapper" class="max-h-96 pr-2"></div>
+            </div>
+        </div>
+        <button id="reservar-btn" class="fixed bottom-4 left-4 right-4 sm:left-auto sm:bottom-8 sm:right-8 sm:w-auto z-40 bg-indigo-600 text-white font-bold py-3 px-6 rounded-full shadow-lg hover:bg-indigo-700 transition-all transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-indigo-300 text-center">Reservar</button>
+        <div id="toast" class="fixed top-4 right-4 left-4 sm:left-auto sm:w-auto z-50 p-4 rounded-lg shadow-xl text-white transition-transform transform translate-x-full sm:translate-x-[120%]" role="alert">
+            <span id="toast-message"></span>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+
+        // --- SECCIÓN DE AUTENTICACIÓN (Sin cambios) ---
+        const USERS = { "admin": "clave123", "usuario1": "pass456" };
+        const loginOverlay = document.getElementById('login-overlay');
+        const mainContent = document.getElementById('main-content');
+        const loginForm = document.getElementById('login-form');
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            if (USERS[username] && USERS[username] === password) {
+                loginOverlay.style.display = 'none';
+                mainContent.style.display = 'block';
+                init();
+            } else {
+                document.getElementById('login-error').classList.remove('hidden');
+                document.getElementById('password').value = '';
+            }
+        });
+
+        // --- CONFIGURACIÓN Y REFERENCIAS (Sin cambios) ---
+        const SHEET_ID = '1f3BMghdIXySvO7IVb0V2xXnYb1mXta4feq-MZQ-iNF0';
+        const GID_CONFIG = '0';
+        const GID_MEDICOS = '1913556286';
+        const URL_CONFIG = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx&gid=${GID_CONFIG}`;
+        const URL_MEDICOS = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx&gid=${GID_MEDICOS}`;
+        const API_RESERVAS_URL = 'https://agentes-liw-n8n-test.6tpykr.easypanel.host/webhook/a3398cd3-14aa-4a54-9c64-abecb95d88e8';
+        const API_CHECK_URL = 'https://agentes-liw-n8n-test.6tpykr.easypanel.host/webhook/2ef1ad96-a7b2-4669-8a8f-d1874781f147';
+        const domRefs = {caeSelect:document.getElementById("cae-select"),boxSelect:document.getElementById("box-select"),medicoSelect:document.getElementById("medico-select"),otroMedicoInput:document.getElementById("otro-medico-input"),calendarGrid:document.getElementById("calendar-grid"),monthYearEl:document.getElementById("month-year"),prevMonthBtn:document.getElementById("prev-month"),nextMonthBtn:document.getElementById("next-month"),timeSlotsWrapper:document.getElementById("time-slots-wrapper"),selectedDayText:document.getElementById("selected-day-text"),timeSlotsContainer:document.getElementById("time-slots-container-wrapper"),reservarBtn:document.getElementById("reservar-btn"),toastEl:document.getElementById("toast"),toastMessageEl:document.getElementById("toast-message")};
+        let configData=[],medicosList=[],currentDate=new Date,selectedDate=null,selectedTimeSlots=new Set,selectedBoxForReservation=null,allOccupiedSlots=new Map;
+        const init=async()=>{domRefs.timeSlotsContainer.style.display="none",await loadAndPopulateFilters(),renderCalendar(),setupEventListeners()};
+
+        // --- LÓGICA PRINCIPAL ---
+
+        // MODIFICADO: Ahora procesa el nuevo formato de la API de Check (con eventId y summary)
+        const fetchAllBoxAvailabilities = async () => {
+            const cae = domRefs.caeSelect.value;
+            allOccupiedSlots.clear();
+
+            if (!cae || !selectedDate) {
+                renderAllTimeSlots();
+                return;
+            }
+
+            const boxesForCae = configData.filter(item => String(item.cae).trim() === cae.trim() && item.calendar_id);
+            if (boxesForCae.length === 0) {
+                renderAllTimeSlots();
+                return;
+            }
+
+            domRefs.timeSlotsWrapper.innerHTML = '<p class="w-full text-center text-slate-500 animate-pulse">Consultando disponibilidad...</p>';
+
+            const timeMin = new Date(selectedDate); timeMin.setHours(0, 0, 0, 0);
+            const timeMax = new Date(selectedDate); timeMax.setHours(23, 59, 59, 999);
+
+            const availabilityPromises = boxesForCae.map(async (mapping) => {
+                try {
+                    const response = await fetch(API_CHECK_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ calendar_id: mapping.calendar_id, timeMin: timeMin.toISOString(), timeMax: timeMax.toISOString() })
+                    });
+                    if (!response.ok) return { box: mapping.box, occupied: [] };
+                    const data = await response.json();
+                    return { box: mapping.box, occupied: data.occupied || [] };
+                } catch (error) {
+                    console.error(`Error consultando box ${mapping.box}:`, error);
+                    return { box: mapping.box, occupied: [] };
+                }
+            });
+
+            try {
+                const results = await Promise.all(availabilityPromises);
+                results.forEach(result => {
+                    // Convertimos el array en un mapa para acceso rápido: { "09:00": {eventId: "...", summary: "..."} }
+                    const occupiedMap = result.occupied.reduce((acc, curr) => {
+                        acc[curr.time] = { eventId: curr.eventId, summary: curr.summary };
+                        return acc;
+                    }, {});
+                    allOccupiedSlots.set(result.box, occupiedMap);
+                });
+            } catch (error) {
+                showToast('Error al consultar la disponibilidad.', 'error');
+            } finally {
+                renderAllTimeSlots();
+            }
+        };
+
+        // MODIFICADO: Ahora renderiza el botón "X" para los horarios ocupados
+        const renderAllTimeSlots = () => {
+            domRefs.timeSlotsContainer.style.display = 'block';
+            domRefs.timeSlotsWrapper.innerHTML = '';
+
+            if (!selectedDate) {
+                 domRefs.selectedDayText.textContent = 'Selecciona un CAE y un día en el calendario';
+                 return;
+            }
+
+            domRefs.selectedDayText.textContent = `Día: ${selectedDate.toLocaleString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}`;
+            const cae = domRefs.caeSelect.value;
+            const boxesForCae = [...new Set(configData.filter(item => String(item.cae).trim() === cae.trim()).map(item => item.box))].sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true}));
+
+            if (boxesForCae.length === 0) {
+                domRefs.timeSlotsWrapper.innerHTML = '<p class="w-full text-center text-slate-500">No hay boxes configurados.</p>';
+                return;
+            }
+            
+            boxesForCae.forEach(boxName => {
+                const columnDiv = document.createElement('div');
+                columnDiv.className = 'box-column';
+                columnDiv.dataset.boxColumn = boxName;
+                columnDiv.innerHTML = `<h4 class="box-title">${boxName}</h4>`;
+                
+                const occupiedForThisBox = allOccupiedSlots.get(boxName) || {};
+                const calendarId = configData.find(item => String(item.box).trim() === boxName.trim() && String(item.cae).trim() === cae.trim())?.calendar_id;
+
+                for (let hour = 8; hour < 20; hour++) {
+                    for (let minute = 0; minute < 60; minute += 30) {
+                        const time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+                        const occupiedInfo = occupiedForThisBox[time];
+                        
+                        if (occupiedInfo) {
+                            const wrapper = document.createElement('div');
+                            wrapper.className = 'slot-occupied-wrapper';
+                            wrapper.innerHTML = `
+                                <span class="truncate" title="${occupiedInfo.summary || 'Ocupado'}">${occupiedInfo.summary || 'Ocupado'}</span>
+                                <button class="delete-btn" title="Eliminar reserva"
+                                        data-event-id="${occupiedInfo.eventId}" 
+                                        data-calendar-id="${calendarId}">
+                                    &times;
+                                </button>
+                            `;
+                            columnDiv.appendChild(wrapper);
+                        } else {
+                            const slotEl = document.createElement('button');
+                            slotEl.textContent = time;
+                            slotEl.dataset.time = time;
+                            slotEl.dataset.box = boxName;
+                            slotEl.className = 'p-2 rounded-lg transition-all text-sm bg-slate-100 hover:bg-indigo-200';
+                            if (selectedBoxForReservation === boxName && selectedTimeSlots.has(time)) {
+                                 slotEl.classList.add('slot-selected');
+                            }
+                            columnDiv.appendChild(slotEl);
+                        }
+                    }
+                }
+                domRefs.timeSlotsWrapper.appendChild(columnDiv);
+            });
+            filterBoxView();
+        };
+
+        // NUEVO: Función para manejar el clic en el botón de eliminar
+        const handleDeleteClick = async (e) => {
+            const target = e.target.closest('.delete-btn');
+            if (!target) return;
+
+            if (!confirm('¿Estás seguro de que quieres eliminar esta reserva? Esta acción es irreversible.')) {
+                return;
+            }
+            
+            const eventId = target.dataset.eventId;
+            const calendarId = target.dataset.calendarId;
+
+            showToast('Eliminando reserva...', 'info');
+            target.disabled = true;
+
+            try {
+                // Usamos la MISMA URL que para crear, pero con un payload diferente
+                const response = await fetch(API_RESERVAS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'delete', // La clave que tu nodo IF en n8n buscará
+                        event_id: eventId,
+                        calendar_id: calendarId
+                    })
+                });
+
+                if (!response.ok) throw new Error(`El servidor respondió con ${response.status}`);
+                
+                showToast('Reserva eliminada con éxito.', 'success');
+                // Refrescar la vista para mostrar el horario como disponible
+                await fetchAllBoxAvailabilities();
+            } catch (error) {
+                console.error('Error al eliminar:', error);
+                showToast('Error al eliminar la reserva.', 'error');
+                target.disabled = false;
+            }
+        };
+
+        // MODIFICADO: El listener de timeSlotsWrapper ahora maneja tanto la selección como la eliminación
+        const setupEventListeners = () => {
+            domRefs.caeSelect.addEventListener('change', () => {
+                updateBoxSelect();
+                if (selectedDate) fetchAllBoxAvailabilities();
+                else { timeSlotsContainer.style.display = 'none'; selectedTimeSlots.clear(); selectedBoxForReservation = null; }
+            });
+            
+            domRefs.boxSelect.addEventListener('change', filterBoxView);
+            domRefs.medicoSelect.addEventListener('change', () => { domRefs.otroMedicoInput.classList.toggle('hidden', domRefs.medicoSelect.value !== 'otro'); });
+            
+            const changeMonth = (offset) => {
+                currentDate.setMonth(currentDate.getMonth() + offset);
+                renderCalendar();
+                timeSlotsContainer.style.display = 'none';
+                selectedDate = null;
+            };
+            domRefs.prevMonthBtn.addEventListener('click', () => changeMonth(-1));
+            domRefs.nextMonthBtn.addEventListener('click', () => changeMonth(1));
+            
+            domRefs.calendarGrid.addEventListener('click', async (e) => {
+                const target = e.target.closest('button');
+                if (!target || !target.dataset.date) return;
+                if (!domRefs.caeSelect.value) return showToast('Primero debes seleccionar un CAE.', 'info');
+                document.querySelectorAll('#calendar-grid button.day-selected').forEach(btn => btn.classList.remove('day-selected'));
+                target.classList.add('day-selected');
+                selectedDate = new Date(target.dataset.date);
+                await fetchAllBoxAvailabilities();
+            });
+            
+            // Listener unificado para el contenedor de horarios
+            domRefs.timeSlotsWrapper.addEventListener('click', (e) => {
+                if (e.target.closest('.delete-btn')) {
+                    handleDeleteClick(e); // Llama a la función de eliminar
+                } else if (e.target.closest('button[data-time]')) {
+                    handleTimeSlotClick(e); // Llama a la función de seleccionar
+                }
+            });
+
+            domRefs.reservarBtn.addEventListener('click', handleReserveClick);
+        };
+        
+        // MODIFICADO: La validación de handleReserveClick ahora usa el nuevo formato de datos
+        async function handleReserveClick() {
+            // ... validaciones iniciales (sin cambios) ...
+            const cae = domRefs.caeSelect.value;
+            const box = selectedBoxForReservation;
+            let medico = domRefs.medicoSelect.value;
+            const otroMedico = domRefs.otroMedicoInput.value.trim();
+            if (medico === 'otro') { if (!otroMedico) return showToast('Ingresa el nombre del nuevo médico.', 'error'); medico = otroMedico; }
+            if (!cae || !box || !medico || !selectedDate || selectedTimeSlots.size === 0) return showToast('Completa todos los campos y selecciona al menos un horario.', 'error');
+            const calendarMapping = configData.find(item => String(item.cae).trim() === cae.trim() && String(item.box).trim() === box.trim());
+            if (!calendarMapping) return showToast('Error: No se encontró calendario para esa combinación.', 'error');
+
+            // Re-validar disponibilidad justo antes de enviar
+            await fetchAllBoxAvailabilities();
+            const slotsArray = Array.from(selectedTimeSlots);
+            const occupiedSlotsForThisBox = allOccupiedSlots.get(box) || {};
+            
+            // La validación ahora busca si la clave de tiempo existe en el objeto de ocupados
+            const alreadyReserved = slotsArray.some(slot => occupiedSlotsForThisBox[slot]);
+            
+            if (alreadyReserved) {
+                showToast('¡Conflicto! Uno de los horarios fue ocupado. Por favor, elige otros.', 'error');
+                selectedTimeSlots.clear();
+                selectedBoxForReservation = null;
+                renderAllTimeSlots(); // Re-renderizar para quitar la selección visual
+                return;
+            }
+
+            // ... el resto de la función para crear el payload y enviar la reserva (sin cambios) ...
+            const calendarId=calendarMapping.calendar_id;const reservas=slotsArray.sort().map(time=>{const[hours,minutes]=time.split(":").map(Number);const fechaInicio=new Date(selectedDate);fechaInicio.setHours(hours,minutes,0,0);const fechaFin=new Date(fechaInicio);fechaFin.setMinutes(fechaInicio.getMinutes()+30);return{fecha_inicio:formatToISOWithOffset(selectedDate,time),fecha_fin:formatToISOWithOffset(selectedDate,`${String(fechaFin.getHours()).padStart(2,"0")}:${String(fechaFin.getMinutes()).padStart(2,"0")}`)}});const payload={cae,box,medico,nuevo_medico:domRefs.medicoSelect.value==="otro",calendar_id:calendarId,reservas};domRefs.reservarBtn.disabled=!0;domRefs.reservarBtn.textContent="Reservando...";showToast("Enviando reserva...","info");try{const response=await fetch(API_RESERVAS_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!response.ok)throw new Error(`El servidor respondió con ${response.status}`);showToast("¡Reserva realizada con éxito!","success"),resetForm()}catch(error){console.error("Error al enviar la reserva:",error),showToast("Error al enviar la reserva. Intenta de nuevo.","error")}finally{domRefs.reservarBtn.disabled=!1,domRefs.reservarBtn.textContent="Reservar"}
+        };
+        
+        // --- El resto de las funciones auxiliares no necesitan cambios ---
+        const handleTimeSlotClick=(e)=>{const target=e.target.closest("button");if(!target||!target.dataset.time||target.disabled)return;const time=target.dataset.time,box=target.dataset.box;if(selectedBoxForReservation&&selectedBoxForReservation!==box){selectedTimeSlots.clear(),document.querySelectorAll(".slot-selected").forEach(el=>el.classList.remove("slot-selected"))}selectedBoxForReservation=box,selectedTimeSlots.has(time)?(selectedTimeSlots.delete(time),target.classList.remove("slot-selected")):(selectedTimeSlots.add(time),target.classList.add("slot-selected")),0===selectedTimeSlots.size&&(selectedBoxForReservation=null)};
+        const fetchSheetData=async(url,requiredColumns)=>{try{const response=await fetch(url);if(!response.ok)throw new Error("Error al descargar datos.");const arrayBuffer=await response.arrayBuffer(),workbook=XLSX.read(new Uint8Array(arrayBuffer),{type:"array"}),sheetName=workbook.SheetNames[0],worksheet=workbook.Sheets[sheetName],jsonData=XLSX.utils.sheet_to_json(worksheet);if(jsonData.length>0)for(const col of requiredColumns)if(!(col in jsonData[0]))throw new Error(`La columna "${col}" no se encontró.`);return jsonData}catch(error){throw error}};
+        const loadAndPopulateFilters=async()=>{try{[configData,medicosList]=await Promise.all([fetchSheetData(URL_CONFIG,["cae","box","calendar_id"]),fetchSheetData(URL_MEDICOS,["medico"])]),populateCaeSelect(),populateMedicoSelect(),showToast("Datos cargados.","success")}catch(error){showToast(error.message,"error"),domRefs.caeSelect.innerHTML='<option value="">Error</option>',domRefs.medicoSelect.innerHTML='<option value="">Error</option>'}};
+        const populateCaeSelect=()=>{const caes=[...new Set(configData.map(item=>item.cae))];domRefs.caeSelect.innerHTML='<option value="">Selecciona un CAE</option>',caes.sort().forEach(cae=>{const option=document.createElement("option");option.value=cae,option.textContent=cae,domRefs.caeSelect.appendChild(option)})};
+        const updateBoxSelect=()=>{const selectedCae=domRefs.caeSelect.value;domRefs.boxSelect.innerHTML='<option value="">Selecciona un CAE</option>',domRefs.boxSelect.disabled=!0,selectedCae&&(uniqueBoxes=[...new Set(configData.filter(item=>String(item.cae).trim()===selectedCae.trim()).map(item=>item.box).sort((a,b)=>String(a).localeCompare(String(b),void 0,{numeric:!0})))],domRefs.boxSelect.innerHTML='<option value="all">-- Todos los BOX --</option>',uniqueBoxes.forEach(box=>{const option=document.createElement("option");option.value=box,option.textContent=box,domRefs.boxSelect.appendChild(option)}),domRefs.boxSelect.disabled=!1)};
+        const filterBoxView=()=>{const selectedBox=domRefs.boxSelect.value,allColumns=document.querySelectorAll(".box-column");allColumns.forEach(column=>{"all"===selectedBox||""===selectedBox?column.style.display="flex":column.style.display=column.dataset.boxColumn===selectedBox?"flex":"none"})};
+        const formatToISOWithOffset=(date,time)=>{const[hours,minutes]=time.split(":"),dateWithTime=new Date(date);dateWithTime.setHours(hours,minutes,0,0);const year=dateWithTime.getFullYear(),month=String(dateWithTime.getMonth()+1).padStart(2,"0"),day=String(dateWithTime.getDate()).padStart(2,"0"),offset=(t=>{const e=t.getFullYear(),o=new Date(e,8,1),a=new Date(o);a.setDate(1+(6-o.getDay()+7)%7),a.setHours(23,59,59);const n=new Date(e,3,1),s=new Date(n);return s.setDate(1+(6-n.getDay()+7)%7),s.setHours(23,59,59),t>=a||t<s?"-03:00":"-04:00"})(dateWithTime);return`${year}-${month}-${day}T${time}:00${offset}`};
+        const showToast=(message,type="info")=>{domRefs.toastMessageEl.textContent=message;const isMobile=window.innerWidth<640,initialTransform=isMobile?"translateX(100%)":"translateX(120%)";domRefs.toastEl.classList.remove("bg-green-500","bg-red-500","bg-blue-500"),isMobile?(domRefs.toastEl.classList.remove("translate-x-[120%]"),domRefs.toastEl.classList.add("translate-x-full")):(domRefs.toastEl.classList.remove("translate-x-full"),domRefs.toastEl.classList.add("translate-x-[120%]"));const typeClasses={success:"bg-green-500",error:"bg-red-500",info:"bg-blue-500"};domRefs.toastEl.classList.add(typeClasses[type]),domRefs.toastEl.style.transform="translateX(0)",setTimeout(()=>{domRefs.toastEl.style.transform=initialTransform},4e3)};
+        const resetForm=()=>{domRefs.caeSelect.value="",updateBoxSelect(),domRefs.medicoSelect.value="",domRefs.otroMedicoInput.value="",domRefs.otroMedicoInput.classList.add("hidden"),selectedDate=null,selectedTimeSlots.clear(),selectedBoxForReservation=null,allOccupiedSlots.clear(),domRefs.timeSlotsContainer.style.display="none",document.querySelectorAll("#calendar-grid button.day-selected").forEach(btn=>btn.classList.remove("day-selected"))};
+        function populateMedicoSelect(){domRefs.medicoSelect.innerHTML='<option value="">Selecciona un Médico</option>',medicosList.forEach(item=>{const option=document.createElement("option");option.value=item.medico,option.textContent=item.medico,domRefs.medicoSelect.appendChild(option)});const otroOption=document.createElement("option");otroOption.value="otro",otroOption.textContent="Otro / Agregar médico...",domRefs.medicoSelect.appendChild(otroOption),domRefs.medicoSelect.disabled=!1}
+        function renderCalendar(){domRefs.calendarGrid.innerHTML='<div class="font-medium text-xs text-slate-500">LU</div><div class="font-medium text-xs text-slate-500">MA</div><div class="font-medium text-xs text-slate-500">MI</div><div class="font-medium text-xs text-slate-500">JU</div><div class="font-medium text-xs text-slate-500">VI</div><div class="font-medium text-xs text-slate-500">SA</div><div class="font-medium text-xs text-slate-500">DO</div>';const year=currentDate.getFullYear(),month=currentDate.getMonth();domRefs.monthYearEl.textContent=currentDate.toLocaleString("es-ES",{month:"long",year:"numeric"}).replace(/^\w/,c=>c.toUpperCase());const firstDayOfMonth=new Date(year,month,1),daysInMonth=new Date(year,month+1,0).getDate(),startDayIndex=(firstDayOfMonth.getDay()+6)%7;for(let i=0;i<startDayIndex;i++)domRefs.calendarGrid.appendChild(document.createElement("div"));for(let day=1;day<=daysInMonth;day++){const dayEl=document.createElement("button");dayEl.textContent=day,dayEl.classList.add("p-1","sm:p-2","rounded-full","hover:bg-slate-100","transition","cursor-pointer","w-full","aspect-square","flex","items-center","justify-center","mx-auto","text-sm");const today=new Date;year===today.getFullYear()&&month===today.getMonth()&&day===today.getDate()&&dayEl.classList.add("bg-slate-200","font-bold"),dayEl.dataset.date=new Date(year,month,day).toISOString(),domRefs.calendarGrid.appendChild(dayEl)}};
+    });
+    </script>
+</body>
+</html>

@@ -1,3 +1,126 @@
+{
+  "name": "Check Availability (Definitivo)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "2ef1ad96-a7b2-4669-8a8f-d1874781f147",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "7f22b6f3-753e-45b6-9bbd-ca482e6bae12",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "2ef1ad96-a7b2-4669-8a8f-d1874781f147"
+    },
+    {
+      "parameters": {
+        "jsCode": "const events = $input.all();\nconst occupiedSlots = []; // Usamos un array vacío para guardar objetos\nconst timeZone = 'America/Santiago';\n\nfor (const event of events) {\n  const startTime = new Date(event.json.start.dateTime || event.json.start.date);\n  \n  const timeString = startTime.toLocaleTimeString('es-CL', {\n    hour: '2-digit',\n    minute: '2-digit',\n    hour12: false,\n    timeZone: timeZone\n  });\n  \n  // Creamos un objeto con toda la información necesaria\n  occupiedSlots.push({\n    time: timeString,\n    eventId: event.json.id, \n    summary: event.json.summary || 'Sin Título'\n  });\n}\n\n// Devolvemos el array de objetos completo\nreturn { occupied: occupiedSlots };"
+      },
+      "id": "ca0cf5a2-beab-4970-998e-88045377d913",
+      "name": "Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "={{ $json.body.calendar_id }}",
+          "mode": "id"
+        },
+        "timeMin": "={{ $json.body.timeMin }}",
+        "timeMax": "={{ $json.body.timeMax }}",
+        "options": {}
+      },
+      "id": "42c476c4-131d-448a-a95f-9db8af38b9c5",
+      "name": "Get many events",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        208,
+        0
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "kqEJSi55TxRgqOsh",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "088cb410-b21f-4032-9b8a-b657ccc68098",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        656,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get many events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many events": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {}
+}```
+
+---
+
+### **Paso 2: Usa este Código Completo para tu Dashboard**
+
+Ahora que tu backend (n8n) está enviando los datos en el formato correcto, necesitamos que tu frontend (el archivo HTML) sepa cómo leerlos.
+
+El siguiente código es una **versión corregida de tu código original**. He modificado las partes necesarias para que lea la nueva estructura de datos y dibuje el botón "X" correctamente, asegurando que los horarios ocupados se sigan marcando.
+
+**Reemplaza todo tu archivo HTML con este código:**
+
+```html
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -90,7 +213,8 @@
         let configData=[],medicosList=[],currentDate=new Date,selectedDate=null,selectedTimeSlots=new Set,selectedBoxForReservation=null,allOccupiedSlots=new Map;
 
         const init = async () => { domRefs.timeSlotsContainer.style.display = "none", await loadAndPopulateFilters(), renderCalendar(), setupEventListeners() };
-
+        
+        // ===== CAMBIO CLAVE 1: CÓMO SE PROCESAN LOS DATOS DE LA API =====
         const fetchAllBoxAvailabilities = async () => {
             const cae = domRefs.caeSelect.value;
             allOccupiedSlots.clear();
@@ -113,13 +237,18 @@
             try {
                 const results = await Promise.all(availabilityPromises);
                 results.forEach(result => {
-                    const occupiedMap = result.occupied.reduce((acc, curr) => { acc[curr.time] = { eventId: curr.eventId, summary: curr.summary }; return acc }, {});
+                    // En lugar de un Set, creamos un mapa de objetos para guardar toda la info
+                    const occupiedMap = result.occupied.reduce((acc, curr) => { 
+                        acc[curr.time] = { eventId: curr.eventId, summary: curr.summary }; 
+                        return acc;
+                    }, {});
                     allOccupiedSlots.set(result.box, occupiedMap);
                 });
             } catch (error) { showToast('Error al consultar la disponibilidad.', 'error') } 
             finally { renderAllTimeSlots() }
         };
 
+        // ===== CAMBIO CLAVE 2: CÓMO SE DIBUJAN LOS HORARIOS OCUPADOS =====
         const renderAllTimeSlots = () => {
             domRefs.timeSlotsContainer.style.display = "block", domRefs.timeSlotsWrapper.innerHTML = "";
             if (!selectedDate) return domRefs.selectedDayText.textContent = "Selecciona un CAE y un día en el calendario";
@@ -132,25 +261,24 @@
             boxesForCae.forEach(boxName => {
                 const columnDiv = document.createElement("div");
                 columnDiv.className = "box-column", columnDiv.dataset.boxColumn = boxName, columnDiv.innerHTML = `<h4 class="box-title">${boxName}</h4>`;
-                const occupiedForThisBox = allOccupiedSlots.get(boxName) || {};
+                const occupiedForThisBox = allOccupiedSlots.get(boxName) || {}; // Ahora es un objeto
                 const calendarId = configData.find(item => String(item.box).trim() === boxName.trim() && String(item.cae).trim() === cae.trim())?.calendar_id;
                 
                 for (let hour = 8; hour < 20; hour++) {
                     for (let minute = 0; minute < 60; minute += 30) {
                         const time = `${String(hour).padStart(2,"0")}:${String(minute).padStart(2,"0")}`;
-                        const occupiedInfo = occupiedForThisBox[time];
-                        if (occupiedInfo && occupiedInfo.eventId) { // Verificación clave: solo dibuja si hay eventId
+                        const occupiedInfo = occupiedForThisBox[time]; // Buscamos la info del horario
+
+                        if (occupiedInfo && occupiedInfo.eventId) {
+                            // Si existe la información (incluido el eventId), dibujamos el botón "X"
                             const wrapper = document.createElement("div");
                             wrapper.className = "slot-occupied-wrapper";
                             wrapper.innerHTML = `<span class="truncate" title="${occupiedInfo.summary||"Ocupado"}">${occupiedInfo.summary||"Ocupado"}</span><button class="delete-btn" title="Eliminar reserva" data-event-id="${occupiedInfo.eventId}" data-calendar-id="${calendarId}">&times;</button>`;
                             columnDiv.appendChild(wrapper);
                         } else {
+                            // Si no, dibujamos el botón normal para reservar
                             const slotEl = document.createElement("button");
                             slotEl.textContent = time, slotEl.dataset.time = time, slotEl.dataset.box = boxName, slotEl.className = "p-2 rounded-lg transition-all text-sm bg-slate-100 hover:bg-indigo-200";
-                            if(occupiedInfo){ // Si está ocupado pero no hay eventId, se deshabilita
-                                slotEl.disabled = true;
-                                slotEl.classList.add('slot-occupied'); // Estilo tachado original
-                            }
                             if (selectedBoxForReservation === boxName && selectedTimeSlots.has(time)) slotEl.classList.add("slot-selected");
                             columnDiv.appendChild(slotEl);
                         }
@@ -161,6 +289,7 @@
             filterBoxView();
         };
 
+        // ===== CAMBIO CLAVE 3: NUEVA FUNCIÓN Y LISTENER PARA ELIMINAR =====
         const handleDeleteClick = async (e) => {
             const target = e.target.closest('.delete-btn');
             if (!target) return;
@@ -188,15 +317,23 @@
                 if (!domRefs.caeSelect.value) return showToast('Primero debes seleccionar un CAE.', 'info');
                 document.querySelectorAll('#calendar-grid button.day-selected').forEach(btn => btn.classList.remove('day-selected')), target.classList.add('day-selected'), selectedDate = new Date(target.dataset.date), await fetchAllBoxAvailabilities();
             });
-            domRefs.timeSlotsWrapper.addEventListener('click', (e) => { e.target.closest('.delete-btn') ? handleDeleteClick(e) : e.target.closest('button[data-time]') && handleTimeSlotClick(e) });
+            // Listener unificado que maneja tanto clics para seleccionar como para eliminar
+            domRefs.timeSlotsWrapper.addEventListener('click', (e) => { 
+                if (e.target.closest('.delete-btn')) {
+                    handleDeleteClick(e);
+                } else if (e.target.closest('button[data-time]')) {
+                    handleTimeSlotClick(e);
+                }
+            });
             domRefs.reservarBtn.addEventListener('click', handleReserveClick);
         };
         
         async function handleReserveClick() {
-            const cae=domRefs.caeSelect.value,box=selectedBoxForReservation;let medico=domRefs.medicoSelect.value;const otroMedico=domRefs.otroMedicoInput.value.trim();if("otro"===medico){if(!otroMedico)return showToast("Ingresa el nombre del nuevo médico.","error");medico=otroMedico}if(!cae||!box||!medico||!selectedDate||0===selectedTimeSlots.size)return showToast("Completa todos los campos y selecciona al menos un horario.","error");const calendarMapping=configData.find(item=>String(item.cae).trim()===cae.trim()&&String(item.box).trim()===box.trim());if(!calendarMapping)return showToast("Error: No se encontró calendario para esa combinación.","error");await fetchAllBoxAvailabilities();const slotsArray=Array.from(selectedTimeSlots),occupiedSlotsForThisBox=allOccupiedSlots.get(box)||{};if(slotsArray.some(slot=>occupiedSlotsForThisBox[slot]))return showToast("¡Conflicto! Uno de los horarios fue ocupado. Por favor, elige otros.","error"),selectedTimeSlots.clear(),selectedBoxForReservation=null,renderAllTimeSlots(),void 0;const calendarId=calendarMapping.calendar_id,reservas=slotsArray.sort().map(time=>{const[hours,minutes]=time.split(":").map(Number),fechaInicio=new Date(selectedDate);fechaInicio.setHours(hours,minutes,0,0);const fechaFin=new Date(fechaInicio);fechaFin.setMinutes(fechaInicio.getMinutes()+30);return{fecha_inicio:formatToISOWithOffset(selectedDate,time),fecha_fin:formatToISOWithOffset(selectedDate,`${String(fechaFin.getHours()).padStart(2,"0")}:${String(fechaFin.getMinutes()).padStart(2,"0")}`)}}),payload={cae,box,medico,nuevo_medico:domRefs.medicoSelect.value==="otro",calendar_id:calendarId,reservas};domRefs.reservarBtn.disabled=!0,domRefs.reservarBtn.textContent="Reservando...",showToast("Enviando reserva...","info");try{const response=await fetch(API_RESERVAS_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!response.ok)throw new Error(`El servidor respondió con ${response.status}`);showToast("¡Reserva realizada con éxito!","success"),resetForm()}catch(error){console.error("Error al enviar la reserva:",error),showToast("Error al enviar la reserva. Intenta de nuevo.","error")}finally{domRefs.reservarBtn.disabled=!1,domRefs.reservarBtn.textContent="Reservar"}
+            const cae=domRefs.caeSelect.value,box=selectedBoxForReservation;let medico=domRefs.medicoSelect.value;const otroMedico=domRefs.otroMedicoInput.value.trim();if("otro"===medico){if(!otroMedico)return showToast("Ingresa el nombre del nuevo médico.","error");medico=otroMedico}if(!e||!box||!medico||!selectedDate||0===selectedTimeSlots.size)return showToast("Completa todos los campos y selecciona al menos un horario.","error");const calendarMapping=configData.find(item=>String(item.cae).trim()===cae.trim()&&String(item.box).trim()===box.trim());if(!calendarMapping)return showToast("Error: No se encontró calendario para esa combinación.","error");await fetchAllBoxAvailabilities();const slotsArray=Array.from(selectedTimeSlots),occupiedSlotsForThisBox=allOccupiedSlots.get(box)||{};if(slotsArray.some(slot=>occupiedSlotsForThisBox[slot]))return showToast("¡Conflicto! Uno de los horarios fue ocupado. Por favor, elige otros.","error"),selectedTimeSlots.clear(),selectedBoxForReservation=null,renderAllTimeSlots(),void 0;const calendarId=calendarMapping.calendar_id,reservas=slotsArray.sort().map(time=>{const[hours,minutes]=time.split(":").map(Number),fechaInicio=new Date(selectedDate);fechaInicio.setHours(hours,minutes,0,0);const fechaFin=new Date(fechaInicio);fechaFin.setMinutes(fechaInicio.getMinutes()+30);return{fecha_inicio:formatToISOWithOffset(selectedDate,time),fecha_fin:formatToISOWithOffset(selectedDate,`${String(fechaFin.getHours()).padStart(2,"0")}:${String(fechaFin.getMinutes()).padStart(2,"0")}`)}}),payload={cae,box,medico,nuevo_medico:domRefs.medicoSelect.value==="otro",calendar_id:calendarId,reservas};domRefs.reservarBtn.disabled=!0,domRefs.reservarBtn.textContent="Reservando...",showToast("Enviando reserva...","info");try{const response=await fetch(API_RESERVAS_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!response.ok)throw new Error(`El servidor respondió con ${response.status}`);showToast("¡Reserva realizada con éxito!","success"),resetForm()}catch(error){console.error("Error al enviar la reserva:",error),showToast("Error al enviar la reserva. Intenta de nuevo.","error")}finally{domRefs.reservarBtn.disabled=!1,domRefs.reservarBtn.textContent="Reservar"}
         }
 
-        const handleTimeSlotClick=(e)=>{const target=e.target.closest("button");if(!target||!target.dataset.time||target.disabled)return;const time=target.dataset.time,box=target.dataset.box;if(selectedBoxForReservation&&selectedBoxForReservation!==box)selectedTimeSlots.clear(),document.querySelectorAll(".slot-selected").forEach(el=>el.classList.remove("slot-selected"));selectedBoxForReservation=box,selectedTimeSlots.has(time)?(selectedTimeSlots.delete(time),target.classList.remove("slot-selected")):(selectedTimeSlots.add(time),target.classList.add("slot-selected")),0===selectedTimeSlots.size&&(selectedBoxForReservation=null)};const fetchSheetData=async(url,requiredColumns)=>{try{const response=await fetch(url);if(!response.ok)throw new Error("Error al descargar datos.");const arrayBuffer=await response.arrayBuffer(),workbook=XLSX.read(new Uint8Array(arrayBuffer),{type:"array"}),worksheet=workbook.Sheets[workbook.SheetNames[0]],jsonData=XLSX.utils.sheet_to_json(worksheet);if(jsonData.length>0)for(const col of requiredColumns)if(!(col in jsonData[0]))throw new Error(`La columna "${col}" no se encontró.`);return jsonData}catch(error){throw error}};const loadAndPopulateFilters=async()=>{try{[configData,medicosList]=await Promise.all([fetchSheetData(URL_CONFIG,["cae","box","calendar_id"]),fetchSheetData(URL_MEDICOS,["medico"])]),populateCaeSelect(),populateMedicoSelect(),showToast("Datos cargados.","success")}catch(error){showToast(error.message,"error")}};const populateCaeSelect=()=>{const caes=[...new Set(configData.map(item=>item.cae))];domRefs.caeSelect.innerHTML='<option value="">Selecciona un CAE</option>',caes.sort().forEach(cae=>{const option=document.createElement("option");option.value=cae,option.textContent=cae,domRefs.caeSelect.appendChild(option)})};const updateBoxSelect=()=>{const selectedCae=domRefs.caeSelect.value;domRefs.boxSelect.innerHTML='<option value="">Selecciona un CAE</option>',domRefs.boxSelect.disabled=!0,selectedCae&&(uniqueBoxes=[...new Set(configData.filter(item=>String(item.cae).trim()===selectedCae.trim()).map(item=>item.box).sort((a,b)=>String(a).localeCompare(String(b),void 0,{numeric:!0})))],domRefs.boxSelect.innerHTML='<option value="all">-- Todos los BOX --</option>',uniqueBoxes.forEach(box=>{const option=document.createElement("option");option.value=box,option.textContent=box,domRefs.boxSelect.appendChild(option)}),domRefs.boxSelect.disabled=!1)};const filterBoxView=()=>{const selectedBox=domRefs.boxSelect.value;document.querySelectorAll(".box-column").forEach(column=>{"all"===selectedBox||""===selectedBox?column.style.display="flex":column.style.display=column.dataset.boxColumn===selectedBox?"flex":"none"})};const formatToISOWithOffset=(date,time)=>{const[hours,minutes]=time.split(":"),dateWithTime=new Date(date);dateWithTime.setHours(hours,minutes,0,0);const year=dateWithTime.getFullYear(),month=String(dateWithTime.getMonth()+1).padStart(2,"0"),day=String(dateWithTime.getDate()).padStart(2,"0"),offset=(t=>{const e=t.getFullYear(),o=new Date(e,8,1),a=new Date(o);a.setDate(1+(6-o.getDay()+7)%7),a.setHours(23,59,59);const n=new Date(e,3,1),s=new Date(n);return s.setDate(1+(6-n.getDay()+7)%7),s.setHours(23,59,59),t>=a||t<s?"-03:00":"-04:00"})(dateWithTime);return`${year}-${month}-${day}T${time}:00${offset}`};const showToast=(message,type="info")=>{domRefs.toastMessageEl.textContent=message;const isMobile=window.innerWidth<640,initialTransform=isMobile?"translateX(100%)":"translateX(120%)";domRefs.toastEl.classList.remove("bg-green-500","bg-red-500","bg-blue-500"),isMobile?domRefs.toastEl.classList.remove("translate-x-[120%]"):domRefs.toastEl.classList.remove("translate-x-full"),isMobile?domRefs.toastEl.classList.add("translate-x-full"):domRefs.toastEl.classList.add("translate-x-[120%]");const typeClasses={success:"bg-green-500",error:"bg-red-500",info:"bg-blue-500"};domRefs.toastEl.classList.add(typeClasses[type]),domRefs.toastEl.style.transform="translateX(0)",setTimeout(()=>{domRefs.toastEl.style.transform=initialTransform},4e3)};const resetForm=()=>{domRefs.caeSelect.value="",updateBoxSelect(),domRefs.medicoSelect.value="",domRefs.otroMedicoInput.value="",domRefs.otroMedicoInput.classList.add("hidden"),selectedDate=null,selectedTimeSlots.clear(),selectedBoxForReservation=null,allOccupiedSlots.clear(),domRefs.timeSlotsContainer.style.display="none",document.querySelectorAll("#calendar-grid button.day-selected").forEach(btn=>btn.classList.remove("day-selected"))};function populateMedicoSelect(){domRefs.medicoSelect.innerHTML='<option value="">Selecciona un Médico</option>',medicosList.forEach(item=>{const option=document.createElement("option");option.value=item.medico,option.textContent=item.medico,domRefs.medicoSelect.appendChild(option)});const otroOption=document.createElement("option");otroOption.value="otro",otroOption.textContent="Otro / Agregar médico...",domRefs.medicoSelect.appendChild(otroOption),domRefs.medicoSelect.disabled=!1}function renderCalendar(){domRefs.calendarGrid.innerHTML='<div class="font-medium text-xs text-slate-500">LU</div><div class="font-medium text-xs text-slate-500">MA</div><div class="font-medium text-xs text-slate-500">MI</div><div class="font-medium text-xs text-slate-500">JU</div><div class="font-medium text-xs text-slate-500">VI</div><div class="font-medium text-xs text-slate-500">SA</div><div class="font-medium text-xs text-slate-500">DO</div>';const year=currentDate.getFullYear(),month=currentDate.getMonth();domRefs.monthYearEl.textContent=currentDate.toLocaleString("es-ES",{month:"long",year:"numeric"}).replace(/^\w/,c=>c.toUpperCase());const firstDayOfMonth=new Date(year,month,1),daysInMonth=new Date(year,month+1,0).getDate(),startDayIndex=(firstDayOfMonth.getDay()+6)%7;for(let i=0;i<startDayIndex;i++)domRefs.calendarGrid.appendChild(document.createElement("div"));for(let day=1;day<=daysInMonth;day++){const dayEl=document.createElement("button");dayEl.textContent=day,dayEl.classList.add("p-1","sm:p-2","rounded-full","hover:bg-slate-100","transition","cursor-pointer","w-full","aspect-square","flex","items-center","justify-center","mx-auto","text-sm");const today=new Date;year===today.getFullYear()&&month===today.getMonth()&&day===today.getDate()&&dayEl.classList.add("bg-slate-200","font-bold"),dayEl.dataset.date=new Date(year,month,day).toISOString(),domRefs.calendarGrid.appendChild(dayEl)}};
+        const handleTimeSlotClick=(e)=>{const target=e.target.closest("button");if(!target||!target.dataset.time||target.disabled)return;const time=target.dataset.time,box=target.dataset.box;if(selectedBoxForReservation&&selectedBoxForReservation!==box)selectedTimeSlots.clear(),document.querySelectorAll(".slot-selected").forEach(el=>el.classList.remove("slot-selected"));selectedBoxForReservation=box,selectedTimeSlots.has(time)?(selectedTimeSlots.delete(time),target.classList.remove("slot-selected")):(selectedTimeSlots.add(time),target.classList.add("slot-selected")),0===selectedTimeSlots.size&&(selectedBoxForReservation=null)};const populateCaeSelect=()=>{const e=[...new Set(configData.map(item=>item.cae))];domRefs.caeSelect.innerHTML='<option value="">Selecciona un CAE</option>',e.sort().forEach(cae=>{const t=document.createElement("option");t.value=cae,t.textContent=cae,domRefs.caeSelect.appendChild(t)})};const updateBoxSelect=()=>{const e=domRefs.caeSelect.value;domRefs.boxSelect.innerHTML='<option value="">Selecciona un CAE</option>',domRefs.boxSelect.disabled=!0,e&&(uniqueBoxes=[...new Set(configData.filter(item=>String(item.cae).trim()===e.trim()).map(item=>item.box).sort((a,b)=>String(a).localeCompare(String(b),void 0,{numeric:!0})))],domRefs.boxSelect.innerHTML='<option value="all">-- Todos los BOX --</option>',uniqueBoxes.forEach(box=>{const t=document.createElement("option");t.value=box,t.textContent=box,domRefs.boxSelect.appendChild(t)}),domRefs.boxSelect.disabled=!1)};const filterBoxView=()=>{const e=domRefs.boxSelect.value;document.querySelectorAll(".box-column").forEach(t=>{"all"===e||""===e?t.style.display="flex":t.style.display=t.dataset.boxColumn===e?"flex":"none"})};const formatToISOWithOffset=(e,t)=>{const[o,n]=t.split(":"),s=new Date(e);s.setHours(o,n,0,0);const r=s.getFullYear(),a=String(s.getMonth()+1).padStart(2,"0"),c=String(s.getDate()).padStart(2,"0"),i=(e=>{const t=e.getFullYear(),o=new Date(t,8,1),n=new Date(o);n.setDate(1+(6-o.getDay()+7)%7),n.setHours(23,59,59);const s=new Date(t,3,1),r=new Date(s);return r.setDate(1+(6-s.getDay()+7)%7),r.setHours(23,59,59),e>=n||e<r?"-03:00":"-04:00"})(s);return`${r}-${a}-${c}T${t}:00${i}`};const showToast=(e,t="info")=>{domRefs.toastMessageEl.textContent=e;const o=window.innerWidth<640,n=o?"translateX(100%)":"translateX(120%)";domRefs.toastEl.classList.remove("bg-green-500","bg-red-500","bg-blue-500"),o?(domRefs.toastEl.classList.remove("translate-x-[120%]"),domRefs.toastEl.classList.remove("translate-x-full"),domRefs.toastEl.classList.add("translate-x-full")):(domRefs.toastEl.classList.remove("translate-x-full"),domRefs.toastEl.classList.add("translate-x-[120%]"));const s={success:"bg-green-500",error:"bg-red-500",info:"bg-blue-500"};domRefs.toastEl.classList.add(s[t]),domRefs.toastEl.style.transform="translateX(0)",setTimeout(()=>{domRefs.toastEl.style.transform=n},4e3)};const resetForm=()=>{domRefs.caeSelect.value="",updateBoxSelect(),domRefs.medicoSelect.value="",domRefs.otroMedicoInput.value="",domRefs.otroMedicoInput.classList.add("hidden"),selectedDate=null,selectedTimeSlots.clear(),selectedBoxForReservation=null,allOccupiedSlots.clear(),domRefs.timeSlotsContainer.style.display="none",document.querySelectorAll("#calendar-grid button.day-selected").forEach(e=>e.classList.remove("day-selected"))};function populateMedicoSelect(){domRefs.medicoSelect.innerHTML='<option value="">Selecciona un Médico</option>',medicosList.forEach(item=>{const e=document.createElement("option");e.value=item.medico,e.textContent=item.medico,domRefs.medicoSelect.appendChild(e)});const e=document.createElement("option");e.value="otro",e.textContent="Otro / Agregar médico...",domRefs.medicoSelect.appendChild(e),domRefs.medicoSelect.disabled=!1}function renderCalendar(){domRefs.calendarGrid.innerHTML='<div class="font-medium text-xs text-slate-500">LU</div><div class="font-medium text-xs text-slate-500">MA</div><div class="font-medium text-xs text-slate-500">MI</div><div class="font-medium text-xs text-slate-500">JU</div><div class="font-medium text-xs text-slate-500">VI</div><div class="font-medium text-xs text-slate-500">SA</div><div class="font-medium text-xs text-slate-500">DO</div>';const e=currentDate.getFullYear(),t=currentDate.getMonth();domRefs.monthYearEl.textContent=currentDate.toLocaleString("es-ES",{month:"long",year:"numeric"}).replace(/^\w/,e=>e.toUpperCase());const o=new Date(e,t,1),n=new Date(e,t+1,0).getDate(),s=(o.getDay()+6)%7;for(let r=0;r<s;r++)domRefs.calendarGrid.appendChild(document.createElement("div"));for(let a=1;a<=n;a++){const c=document.createElement("button");c.textContent=a,c.classList.add("p-1","sm:p-2","rounded-full","hover:bg-slate-100","transition","cursor-pointer","w-full","aspect-square","flex","items-center","justify-center","mx-auto","text-sm");const i=new Date;e===i.getFullYear()&&t===i.getMonth()&&a===i.getDate()&&c.classList.add("bg-slate-200","font-bold"),c.dataset.date=new Date(e,t,a).toISOString(),domRefs.calendarGrid.appendChild(c)}};
+
     });
     </script>
 </body>

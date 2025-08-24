@@ -217,7 +217,7 @@
         const GID_MEDICOS = '1913556286';
         const URL_CONFIG = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx&gid=${GID_CONFIG}`;
         const URL_MEDICOS = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx&gid=${GID_MEDICOS}`;
-        const API_RESERVAS_URL = 'https://agentes-liw-n8n-test.6tpykr.easypanel.host/webhook/a3398cd3-14aa-4a54-9c64-abecb95d88e8';
+        const API_RESERVAS_URL = 'https://agentes-liw-n8n-test.6tpykr.easypanel.host/webhook-test/a3398cd3-14aa-4a54-9c64-abecb95d88e8';
         const API_CHECK_URL = 'https://agentes-liw-n8n-test.6tpykr.easypanel.host/webhook/2ef1ad96-a7b2-4669-8a8f-d1874781f147';
         const domRefs = {caeSelect:document.getElementById("cae-select"),boxSelect:document.getElementById("box-select"),medicoSelect:document.getElementById("medico-select"),otroMedicoInput:document.getElementById("otro-medico-input"),calendarGrid:document.getElementById("calendar-grid"),monthYearEl:document.getElementById("month-year"),prevMonthBtn:document.getElementById("prev-month"),nextMonthBtn:document.getElementById("next-month"),timeSlotsWrapper:document.getElementById("time-slots-wrapper"),selectedDayText:document.getElementById("selected-day-text"),timeSlotsContainer:document.getElementById("time-slots-container-wrapper"),reservarBtn:document.getElementById("reservar-btn"),toastEl:document.getElementById("toast"),toastMessageEl:document.getElementById("toast-message")};
         let configData=[],medicosList=[],currentDate=new Date,selectedDate=null,selectedTimeSlots=new Set,selectedBoxForReservation=null,allOccupiedSlots=new Map;

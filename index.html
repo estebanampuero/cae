@@ -92,7 +92,6 @@
         const URL_MEDICOS = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx&gid=${GID_MEDICOS}`;
         const API_RESERVAS_URL = 'https://agentes-liw-n8n.6tpykr.easypanel.host/webhook/a3398cd3-14aa-4a54-9c64-abecb95d88e8';
         const API_CHECK_URL = 'https://agentes-liw-n8n.6tpykr.easypanel.host/webhook/2ef1ad96-a7b2-4669-8a8f-d1874781f147';
-        // ===== ¡IMPORTANTE! Pega aquí la URL de tu NUEVO workflow de eliminación =====
         const API_DELETE_URL = 'https://agentes-liw-n8n.6tpykr.easypanel.host/webhook/delete-reservation';
 
         const caeSelect = document.getElementById('cae-select');
@@ -187,8 +186,6 @@
             }
         };
 
-        // ===== INICIO DE CAMBIOS DE LÓGICA =====
-        
         const fetchAllBoxAvailabilities = async () => {
             const cae = caeSelect.value;
             allOccupiedSlots.clear();
@@ -206,7 +203,10 @@
                     if (!response.ok) return { box: mapping.box, occupied: [] };
                     const data = await response.json();
                     return { box: mapping.box, occupied: data.occupied || [] };
-                } catch (error) { return { box: mapping.box, occupied: [] } }
+                } catch (error) { 
+                    console.error(`Error al consultar disponibilidad para ${mapping.box}:`, error);
+                    return { box: mapping.box, occupied: [] };
+                }
             });
             try {
                 const results = await Promise.all(availabilityPromises);
@@ -217,8 +217,12 @@
                     }, {});
                     allOccupiedSlots.set(result.box, occupiedMap);
                 });
-            } catch (error) { showToast('Error al consultar la disponibilidad.', 'error') } 
-            finally { renderAllTimeSlots() }
+            } catch (error) { 
+                showToast('Error al consultar la disponibilidad.', 'error');
+            } 
+            finally { 
+                renderAllTimeSlots();
+            }
         };
         
         const renderAllTimeSlots = () => {
@@ -228,7 +232,7 @@
             
             selectedDayText.textContent = `Día: ${selectedDate.toLocaleString("es-ES",{weekday:"long",day:"numeric",month:"long"})}`;
             const cae = caeSelect.value;
-            const boxesForCae = [...new Set(configData.filter(item => String(item.cae).trim() === cae.trim()).map(item => item.box))].sort((a, b) => String(a).localeCompare(String(b), void 0, { numeric: true }));
+            const boxesForCae = [...new Set(configData.filter(item => String(item.cae).trim() === cae.trim()).map(item => item.box))].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
             if (boxesForCae.length === 0) return timeSlotsWrapper.innerHTML = '<p class="w-full text-center text-slate-500">No hay boxes configurados.</p>';
             
             boxesForCae.forEach(boxName => {
@@ -243,10 +247,11 @@
                     for (let minute = 0; minute < 60; minute += 30) {
                         const time = `${String(hour).padStart(2,"0")}:${String(minute).padStart(2,"0")}`;
                         const occupiedInfo = occupiedForThisBox[time];
+
                         if (occupiedInfo && occupiedInfo.eventId) {
                             const wrapper = document.createElement("div");
                             wrapper.className = "slot-occupied-wrapper";
-                            wrapper.innerHTML = `<span class="truncate" title="${occupiedInfo.summary||"Ocupado"}">${occupiedInfo.summary||"Ocupado"}</span><button class="delete-btn" title="Eliminar reserva" data-event-id="${occupiedInfo.eventId}" data-calendar-id="${calendarId}">&times;</button>`;
+                            wrapper.innerHTML = `<span class="truncate" title="${occupiedInfo.summary || "Ocupado"}">${occupiedInfo.summary || "Ocupado"}</span><button class="delete-btn" title="Eliminar reserva" data-event-id="${occupiedInfo.eventId}" data-calendar-id="${calendarId}">&times;</button>`;
                             columnDiv.appendChild(wrapper);
                         } else {
                             const slotEl = document.createElement("button");
@@ -254,7 +259,9 @@
                             slotEl.dataset.time = time;
                             slotEl.dataset.box = boxName;
                             slotEl.className = "p-2 rounded-lg transition-all text-sm bg-slate-100 hover:bg-indigo-200";
-                            if (selectedBoxForReservation === boxName && selectedTimeSlots.has(time)) slotEl.classList.add("slot-selected");
+                            if (selectedBoxForReservation === boxName && selectedTimeSlots.has(time)) {
+                                slotEl.classList.add("slot-selected");
+                            }
                             columnDiv.appendChild(slotEl);
                         }
                     }
@@ -264,27 +271,31 @@
             filterBoxView();
         };
 
-        // CÓDIGO CORREGIDO Y LIMPIO
-const handleDeleteClick = async (e) => {
-    const target = e.target.closest('.delete-btn');
-    if (!target) return;
+        const handleDeleteClick = async (e) => {
+            const target = e.target.closest('.delete-btn');
+            if (!target) return;
 
-    if (!confirm('¿Estás seguro de que quieres eliminar esta reserva?')) return;
-    
-    const eventId = target.dataset.eventId;
-    const calendarId = target.dataset.calendarId;
-    showToast('Eliminando reserva...', 'info');
-    target.disabled = true;
-    try {
-        const response = await fetch(API_DELETE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event_id: eventId, calendar_id: calendarId }) });
-        if (!response.ok) throw new Error(`El servidor respondió con ${response.status}`);
-        showToast('Reserva eliminada con éxito.', 'success');
-        await fetchAllBoxAvailabilities();
-    } catch (error) { 
-        showToast('Error al eliminar la reserva.', 'error'); 
-        target.disabled = false; 
-    }
-};
+            if (!confirm('¿Estás seguro de que quieres eliminar esta reserva?')) return;
+            
+            const eventId = target.dataset.eventId;
+            const calendarId = target.dataset.calendarId;
+            showToast('Eliminando reserva...', 'info');
+            target.disabled = true;
+            try {
+                const response = await fetch(API_DELETE_URL, { 
+                    method: "POST", 
+                    headers: { "Content-Type": "application/json" }, 
+                    body: JSON.stringify({ event_id: eventId, calendar_id: calendarId }) 
+                });
+                if (!response.ok) throw new Error(`El servidor respondió con ${response.status}`);
+                showToast('Reserva eliminada con éxito.', 'success');
+                await fetchAllBoxAvailabilities();
+            } catch (error) { 
+                showToast('Error al eliminar la reserva.', 'error'); 
+                target.disabled = false; 
+            }
+        };
+
         const setupEventListeners = () => {
             caeSelect.addEventListener('change', () => { updateBoxSelect(); if (selectedDate) fetchAllBoxAvailabilities(); else { timeSlotsContainer.style.display = 'none'; selectedTimeSlots.clear(); selectedBoxForReservation = null; } });
             boxSelect.addEventListener('change', filterBoxView);
@@ -303,8 +314,6 @@ const handleDeleteClick = async (e) => {
             });
             reservarBtn.addEventListener('click', handleReserveClick);
         };
-        
-        // ===== FIN DE CAMBIOS DE LÓGICA =====
         
         const handleDayClick = async (e) => {
             const target = e.target.closest('button');

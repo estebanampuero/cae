@@ -267,8 +267,7 @@
         const handleDeleteClick = async (e) => {
             const target = e.target.closest('.delete-btn');
             if (!target) return;
-            if (API_DELETE_URL === 'https://agentes-liw-n8n.6tpykr.easypanel.host/webhook/delete-reservation') {
-                return showToast('Error: Debes configurar la URL de eliminación en el código.', 'error');
+            
             }
             if (!confirm('¿Estás seguro de que quieres eliminar esta reserva?')) return;
             

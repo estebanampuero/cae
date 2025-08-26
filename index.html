@@ -264,28 +264,27 @@
             filterBoxView();
         };
 
-        const handleDeleteClick = async (e) => {
-            const target = e.target.closest('.delete-btn');
-            if (!target) return;
-            
-            }
-            if (!confirm('¿Estás seguro de que quieres eliminar esta reserva?')) return;
-            
-            const eventId = target.dataset.eventId;
-            const calendarId = target.dataset.calendarId;
-            showToast('Eliminando reserva...', 'info');
-            target.disabled = true;
-            try {
-                const response = await fetch(API_DELETE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event_id: eventId, calendar_id: calendarId }) });
-                if (!response.ok) throw new Error(`El servidor respondió con ${response.status}`);
-                showToast('Reserva eliminada con éxito.', 'success');
-                await fetchAllBoxAvailabilities();
-            } catch (error) { 
-                showToast('Error al eliminar la reserva.', 'error'); 
-                target.disabled = false; 
-            }
-        };
+        // CÓDIGO CORREGIDO Y LIMPIO
+const handleDeleteClick = async (e) => {
+    const target = e.target.closest('.delete-btn');
+    if (!target) return;
 
+    if (!confirm('¿Estás seguro de que quieres eliminar esta reserva?')) return;
+    
+    const eventId = target.dataset.eventId;
+    const calendarId = target.dataset.calendarId;
+    showToast('Eliminando reserva...', 'info');
+    target.disabled = true;
+    try {
+        const response = await fetch(API_DELETE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event_id: eventId, calendar_id: calendarId }) });
+        if (!response.ok) throw new Error(`El servidor respondió con ${response.status}`);
+        showToast('Reserva eliminada con éxito.', 'success');
+        await fetchAllBoxAvailabilities();
+    } catch (error) { 
+        showToast('Error al eliminar la reserva.', 'error'); 
+        target.disabled = false; 
+    }
+};
         const setupEventListeners = () => {
             caeSelect.addEventListener('change', () => { updateBoxSelect(); if (selectedDate) fetchAllBoxAvailabilities(); else { timeSlotsContainer.style.display = 'none'; selectedTimeSlots.clear(); selectedBoxForReservation = null; } });
             boxSelect.addEventListener('change', filterBoxView);
